@@ -1,0 +1,1560 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#cf01cf" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="SKY Contratti" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" href="icons/icon-192.png" />
+  <title>Sky • Gestione Contratti Partner</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+  <style>
+    :root{
+      --sky:#cf01cf;
+      --bg:#f6f7fb;
+      --card:#ffffff;
+      --text:#0f172a;
+      --muted:#64748b;
+      --border:#e5e7eb;
+      --shadow:0 14px 34px rgba(15,23,42,.10);
+      --radius:18px;
+      --good:#10b981;
+      --warn:#f59e0b;
+      --bad:#ef4444;
+      --wa:#03bf62;
+      --chip:#f1f5f9;
+    }
+    *{box-sizing:border-box}
+    html, body{ overscroll-behavior-y: contain; }
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+      background:
+        radial-gradient(1200px 600px at 20% -10%, rgba(207,1,207,.14), transparent 60%),
+        radial-gradient(900px 500px at 90% 0%, rgba(5,168,176,.10), transparent 55%),
+        var(--bg);
+      color:var(--text);
+      padding:14px;
+      padding-top: max(14px, env(safe-area-inset-top));
+      padding-bottom: max(14px, env(safe-area-inset-bottom));
+    }
+
+    .topbar{
+      max-width:1280px;
+      margin:0 auto 14px;
+      background: linear-gradient(90deg, #cf01cf, #6a00ff);
+      color:#fff;
+      border-radius:20px;
+      padding:16px 18px;
+      box-shadow: var(--shadow);
+      display:grid;
+      grid-template-columns: 1fr auto;
+      gap:12px;
+      align-items:center;
+    }
+    .topbar .brand{ min-width:0; }
+    .topbar h1{ margin:0; font-size:18px; letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .topbar .actions{ justify-content:flex-end; }
+    .sub{ margin:2px 0 0; font-size:12.5px; opacity:.9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+    .wrap{ max-width:1280px; margin:0 auto; display:grid; gap:14px; }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:var(--radius);
+      box-shadow: var(--shadow);
+      padding:14px;
+    }
+    .card h2{
+      margin:0 0 10px;
+      font-size:14px;
+      color:var(--muted);
+      font-weight:900;
+      letter-spacing:.2px;
+      text-transform:uppercase;
+    }
+
+    .grid{ display:grid; gap:10px; grid-template-columns: repeat(12, 1fr); }
+    .field{ grid-column: span 3; }
+    .field.wide{ grid-column: span 4; }
+    .field.narrow{ grid-column: span 2; }
+    .field.full{ grid-column: span 12; }
+    label{
+      display:block;
+      font-size:12px;
+      color:var(--muted);
+      margin:0 0 6px;
+      font-weight:900;
+    }
+    input, select, textarea{
+      width:100%;
+      padding:12px 12px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      outline:none;
+      font-size:16px;
+      background:#fff;
+      font-family:inherit;
+    }
+    textarea{ min-height:96px; resize:vertical; }
+    input:focus, select:focus, textarea:focus{
+      border-color: rgba(207,1,207,.55);
+      box-shadow: 0 0 0 4px rgba(207,1,207,.10);
+    }
+
+    .actions{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .btn{
+      border:0;
+      border-radius:14px;
+      padding:11px 14px;
+      font-weight:950;
+      cursor:pointer;
+      font-size:14px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      user-select:none;
+      min-height:44px;
+    }
+    .btn-primary{ background:linear-gradient(90deg, #cf01cf, #6a00ff); color:#fff; }
+    .btn-ghost{ background:#fff; border:1px solid var(--border); color:var(--text); }
+    .btn-danger{ background:#fff; border:1px solid rgba(239,68,68,.35); color:#b91c1c; }
+    .btn-wa{ background: linear-gradient(90deg, var(--wa), #16a34a); color:#fff; }
+    .btn-soft{ background: rgba(207,1,207,.08); border:1px solid rgba(207,1,207,.18); color:var(--text); }
+    .btn-top{ background: rgba(255,255,255,.18); border:1px solid rgba(255,255,255,.25); color:#fff; }
+
+    .pill{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px; border-radius:999px;
+      background: rgba(255,255,255,.18);
+      border:1px solid rgba(255,255,255,.25);
+      font-weight:950; font-size:13px; white-space:nowrap;
+    }
+    .muted{ color:var(--muted); }
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace; font-size:12.5px; }
+
+    .tableWrap{ overflow:auto; -webkit-overflow-scrolling: touch; border-radius:16px; border:1px solid var(--border); background:#fff; }
+    table{ width:100%; border-collapse:separate; border-spacing:0; min-width:1500px; background:#fff; }
+    thead th{
+      position:sticky; top:0;
+      background: linear-gradient(90deg, rgba(207,1,207,.10), rgba(106,0,255,.08));
+      color:#0f172a; font-size:12px; text-align:left; padding:12px 10px;
+      border-bottom:1px solid var(--border); white-space:nowrap;
+    }
+    tbody td{ padding:10px 10px; border-bottom:1px solid var(--border); font-size:13.5px; vertical-align:middle; white-space:nowrap; }
+    tbody tr:hover{ background: rgba(2,132,199,.04); }
+    .right{ text-align:right; }
+
+    .badge{ display:inline-flex; align-items:center; padding:6px 10px; border-radius:999px; font-weight:950; font-size:12px; border:1px solid transparent; }
+    .b-good{ background: rgba(16,185,129,.14); border-color: rgba(16,185,129,.32); color:#065f46; }
+    .b-warn{ background: rgba(245,158,11,.16); border-color: rgba(245,158,11,.34); color:#7c2d12; }
+    .b-bad{  background: rgba(239,68,68,.12); border-color: rgba(239,68,68,.32); color:#7f1d1d; }
+    .b-neutral{ background: rgba(100,116,139,.14); border-color: rgba(100,116,139,.28); color:#334155; }
+    .b-black{ background: rgba(15,23,42,.88); border-color: rgba(15,23,42,.95); color:#ffffff; }
+    .b-purple{ background: rgba(139,92,246,.14); border-color: rgba(139,92,246,.36); color:#5b21b6; }
+
+    .kpiRow{ display:grid; gap:10px; grid-template-columns: repeat(12, 1fr); }
+    .kpi{
+      grid-column: span 4;
+      border:1px solid var(--border); border-radius:16px; padding:12px;
+      background: linear-gradient(180deg, rgba(207,1,207,.06), rgba(106,0,255,.04));
+    }
+    .kpi .t{ font-size:12px; color:var(--muted); font-weight:950; text-transform:uppercase; letter-spacing:.2px; }
+    .kpi .v{ font-size:22px; font-weight:1000; margin-top:6px; }
+    .kpi .s{ font-size:12.5px; color:var(--muted); margin-top:4px; }
+
+    .filtersPanel{ border:1px solid var(--border); border-radius:16px; background: linear-gradient(180deg, rgba(15,23,42,.02), rgba(15,23,42,.00)); padding:12px; }
+    .filtersHead{ display:grid; grid-template-columns: 1fr auto; align-items:center; gap:12px; margin-bottom:12px; }
+    .filtersHead .title{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-weight:1000; }
+    .filterActions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end; }
+    .filterActions .btn{ flex:0 0 auto; }
+    .chip{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background: var(--chip); border:1px solid var(--border); color:#0f172a; font-weight:950; font-size:12px; white-space:nowrap; }
+
+    .modalBackdrop{
+      position:fixed; inset:0;
+      background: rgba(15,23,42,.55);
+      display:none;
+      align-items:center; justify-content:center;
+      padding:12px; z-index:999;
+    }
+    .modalBackdrop.show{ display:flex; }
+    .modal{
+      width:min(980px, 100%);
+      max-height: calc(100vh - 24px);
+      display:flex; flex-direction:column;
+      background:#fff;
+      border-radius:20px;
+      border:1px solid var(--border);
+      box-shadow: 0 22px 60px rgba(0,0,0,.30);
+      overflow:hidden;
+    }
+    .modalHead{
+      background: linear-gradient(90deg, rgba(207,1,207,.12), rgba(106,0,255,.10));
+      padding:14px 16px;
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+    }
+    .modalHead strong{ font-size:14px; }
+    .modalBody{ padding:14px 16px; overflow:auto; flex:1; }
+    .modalFoot{
+      padding:14px 16px; display:flex; gap:10px; justify-content:flex-end;
+      border-top:1px solid var(--border); background:#fff; flex-wrap:wrap;
+    }
+
+    .hidden{ display:none !important; }
+
+    /* Login screen */
+    .authScreen{
+      max-width: 440px; margin: 10vh auto 0; padding: 22px;
+      background: var(--card); border:1px solid var(--border); border-radius: 22px;
+      box-shadow: var(--shadow);
+    }
+    .authScreen h1{ margin:0 0 6px; font-size:20px; }
+    .authScreen p.sub{ margin:0 0 18px; color: var(--muted); font-size:13px; }
+    .authTabs{ display:flex; gap:8px; margin-bottom:14px; }
+    .authTab{
+      flex:1; padding:10px; border-radius:12px; border:1px solid var(--border);
+      background:#fff; font-weight:900; cursor:pointer; font-size:14px;
+    }
+    .authTab.active{ background: linear-gradient(90deg,#cf01cf,#6a00ff); color:#fff; border-color:transparent; }
+    .authMsg{ font-size:13px; margin-top:10px; min-height: 18px; }
+    .authMsg.err{ color:#b91c1c; }
+    .authMsg.ok{ color:#065f46; }
+
+    .spinner{
+      display:inline-block; width:14px; height:14px; border:2px solid rgba(255,255,255,.4);
+      border-top-color:#fff; border-radius:50%; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .toast{
+      position:fixed; left:50%; bottom:24px; transform: translateX(-50%);
+      background: #0f172a; color:#fff; padding:10px 14px; border-radius:12px;
+      font-size:13px; z-index: 1000; opacity:0; transition: opacity .2s;
+      max-width: 90vw; text-align:center;
+    }
+    .toast.show{ opacity: 1; }
+
+    @media (max-width: 980px){
+      .field, .field.wide, .field.narrow{ grid-column: span 12; }
+      .kpi{ grid-column: span 12; }
+      table{ min-width: 1850px; }
+      .pill{ width:100%; justify-content:center; }
+      .topbar{ grid-template-columns: 1fr; }
+      .topbar h1{ font-size:16px; white-space:normal; }
+      .topbar .actions{ display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; justify-content:stretch; }
+      .topbar .actions .btn{ width:100%; }
+      .topbar .actions .pill{ grid-column: span 2; }
+      .filtersHead{ grid-template-columns: 1fr; }
+      .filterActions{ display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; justify-content:stretch; }
+      .filterActions .btn{ width:100%; flex:1 1 auto; }
+      .modalFoot{ flex-direction:column-reverse; }
+      .modalFoot .btn{ width:100%; }
+    }
+    @media (max-width: 520px){
+      body{ padding:10px; }
+      .card{ padding:12px; }
+      .filtersPanel{ padding:10px; }
+      .filterActions{ grid-template-columns: 1fr; }
+      .topbar{ padding:14px; }
+      .topbar .actions{ grid-template-columns: 1fr; }
+      .topbar .actions .pill{ grid-column: span 1; }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- LOGIN / SIGNUP -->
+  <div id="authView" class="hidden">
+    <div class="authScreen">
+      <h1>SKY • Contratti Partner</h1>
+      <p class="sub">Accedi per sincronizzare i tuoi contratti su tutti i dispositivi.</p>
+
+      <div class="authTabs">
+        <button class="authTab active" id="tabSignin" type="button">Accedi</button>
+        <button class="authTab" id="tabSignup" type="button">Registrati</button>
+      </div>
+
+      <form id="authForm" autocomplete="on">
+        <div class="field full" style="margin-bottom:10px">
+          <label>Email</label>
+          <input type="email" id="authEmail" required autocomplete="email" />
+        </div>
+        <div class="field full" style="margin-bottom:10px">
+          <label>Password</label>
+          <input type="password" id="authPass" required minlength="6" autocomplete="current-password" />
+        </div>
+        <button class="btn btn-primary" id="authSubmit" type="submit" style="width:100%">Accedi</button>
+        <div class="authMsg" id="authMsg"></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- APP -->
+  <div id="appView" class="hidden">
+    <div class="topbar">
+      <div class="brand">
+        <h1>SKY • Gestione Contratti Partner</h1>
+        <p class="sub" id="userBadge">—</p>
+      </div>
+      <div class="actions" style="margin:0">
+        <button class="btn btn-top" type="button" id="btnAdd">➕ AGGIUNGI</button>
+        <button class="btn btn-top" type="button" id="btnToggleRank">🏆 CLASSIFICA</button>
+        <button class="btn btn-top" type="button" id="btnLogout">Esci</button>
+        <div class="pill" id="kpiPill">Totale: 0 • Punti: 0</div>
+      </div>
+    </div>
+
+    <div class="wrap">
+
+      <!-- PRODUZIONE MESE -->
+      <div class="card">
+        <h2>Produzione del mese (da Data Inserimento)</h2>
+        <div class="grid">
+          <div class="field wide">
+            <label>Mese di riferimento</label>
+            <select id="mMonth"></select>
+          </div>
+          <div class="field full">
+            <div class="kpiRow">
+              <div class="kpi">
+                <div class="t">Totale contratti</div>
+                <div class="v" id="kpiMonthContracts">0</div>
+                <div class="s" id="kpiMonthContractsSub">—</div>
+              </div>
+              <div class="kpi">
+                <div class="t">Totale punti</div>
+                <div class="v" id="kpiMonthPoints">0</div>
+                <div class="s" id="kpiMonthPointsSub">—</div>
+              </div>
+              <div class="kpi">
+                <div class="t">Negozio top (punti)</div>
+                <div class="v" id="kpiTopShop">—</div>
+                <div class="s" id="kpiTopShopSub">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="muted" id="monthHint" style="margin:10px 2px 0;font-size:12.5px;"></p>
+      </div>
+
+      <!-- CLASSIFICA -->
+      <div class="card hidden" id="rankCard">
+        <h2>Classifica negozi</h2>
+        <div class="grid">
+          <div class="field wide">
+            <label>Periodo</label>
+            <select id="rankMode">
+              <option value="month">Mensile (mese selezionato sopra)</option>
+              <option value="year">Annuale (anno selezionato)</option>
+            </select>
+          </div>
+          <div class="field wide hidden" id="rankYearWrap">
+            <label>Anno</label>
+            <select id="rankYear"></select>
+          </div>
+
+          <div class="field full">
+            <div class="tableWrap">
+              <table style="min-width:920px">
+                <thead>
+                  <tr>
+                    <th>Negozio</th>
+                    <th class="right">Contratti</th>
+                    <th class="right">Punti</th>
+                  </tr>
+                </thead>
+                <tbody id="rankBody"></tbody>
+              </table>
+            </div>
+            <p class="muted" id="rankHint" style="margin:10px 2px 0;font-size:12.5px;"></p>
+          </div>
+        </div>
+      </div>
+
+      <!-- FILTRI + AZIONI -->
+      <div class="card">
+        <h2>Filtri archivio + azioni</h2>
+        <div class="filtersPanel">
+          <div class="filtersHead">
+            <div class="title">
+              <span class="chip">🔎 Filtri</span>
+              <span class="muted" id="filtersHint">—</span>
+            </div>
+            <div class="filterActions">
+              <button class="btn btn-soft" type="button" id="btnClearFilters">Reset filtri</button>
+              <button class="btn btn-ghost" type="button" id="btnExportCsv">Esporta CSV</button>
+              <button class="btn btn-ghost" type="button" id="btnExportBackup">Esporta backup</button>
+              <button class="btn btn-ghost" type="button" id="btnImportBackup">Importa backup</button>
+              <input type="file" id="backupFile" accept=".json,application/json" class="hidden" />
+              <button class="btn btn-ghost" type="button" id="btnExportPdf">🖨️ Stampa PDF</button>
+              <button class="btn btn-wa" type="button" id="btnWhatsApp">Invia WhatsApp</button>
+            </div>
+          </div>
+
+          <div class="grid">
+            <div class="field wide">
+              <label>Negozio</label>
+              <select id="fNegozio"><option value="">Tutti</option></select>
+            </div>
+            <div class="field">
+              <label>Mese (Data Inserimento)</label>
+              <select id="fMonth"><option value="">Tutti</option></select>
+            </div>
+            <div class="field">
+              <label>Tipologia</label>
+              <select id="fTipologia">
+                <option value="">Tutte</option>
+                <option value="wifi">wifi</option>
+                <option value="tv">tv</option>
+                <option value="3p">3P</option>
+                <option value="4p">4P</option>
+                <option value="glass">glass</option>
+                <option value="wifi_prova">wifi+prova</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Stato</label>
+              <select id="fStato">
+                <option value="">Tutti</option>
+                <option value="attivo">attivo</option>
+                <option value="tv_attivo">tv attivo</option>
+                <option value="wifi_attivo">wifi attivo</option>
+                <option value="in_attivazione">in attivazione</option>
+                <option value="washing">washing</option>
+                <option value="ko">ko</option>
+                <option value="annullato">annullato</option>
+              </select>
+            </div>
+            <div class="field full">
+              <label>Ricerca</label>
+              <input id="fSearch" placeholder="Nome, Cognome, CF, Codice contratto, Negozio, Note…" />
+            </div>
+            <div class="field full">
+              <div class="actions">
+                <button class="btn btn-danger" type="button" id="btnClearAll">Svuota archivio</button>
+                <span class="muted">Export/WhatsApp rispettano i filtri attivi.</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ARCHIVIO -->
+      <div class="card">
+        <h2>Archivio contratti</h2>
+        <div class="tableWrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Negozio</th>
+                <th>Nome</th>
+                <th>Cognome</th>
+                <th>Codice Fiscale</th>
+                <th>Cod. Contratto</th>
+                <th>Tipologia</th>
+                <th>Stato</th>
+                <th>Data Inser.</th>
+                <th>Data WiFi</th>
+                <th>Data TV</th>
+                <th>Note</th>
+                <th class="right">Punti</th>
+                <th class="right">Azioni</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <p class="muted" style="margin:10px 2px 0;font-size:12.5px;">
+          Dati sincronizzati su Supabase — accessibili da qualsiasi dispositivo dopo il login.
+        </p>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- MODAL ADD -->
+  <div class="modalBackdrop" id="addBackdrop">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modalHead">
+        <strong>➕ Aggiungi contratto</strong>
+        <button class="btn btn-ghost" type="button" id="btnCloseAdd">Chiudi</button>
+      </div>
+      <div class="modalBody">
+        <form id="addForm" autocomplete="off">
+          <div class="grid">
+            <div class="field wide"><label>Negozio / Partner</label><input id="aNegozio" required placeholder="Es. Jenio Torino / AF Store / ..." /></div>
+            <div class="field"><label>Nome</label><input id="aNome" required /></div>
+            <div class="field"><label>Cognome</label><input id="aCognome" required /></div>
+            <div class="field wide"><label>Codice Fiscale</label><input id="aCf" class="mono" required /></div>
+            <div class="field wide"><label>Codice contratto</label><input id="aCodContratto" class="mono" required /></div>
+            <div class="field">
+              <label>Tipologia</label>
+              <select id="aTipologia" required>
+                <option value="" disabled selected>Seleziona…</option>
+                <option value="wifi">wifi</option>
+                <option value="tv">tv</option>
+                <option value="3p">3P</option>
+                <option value="4p">4P</option>
+                <option value="glass">glass</option>
+                <option value="wifi_prova">wifi+prova</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Stato</label>
+              <select id="aStato" required>
+                <option value="attivo">attivo</option>
+                <option value="tv_attivo">tv attivo</option>
+                <option value="wifi_attivo">wifi attivo</option>
+                <option value="in_attivazione">in attivazione</option>
+                <option value="washing">washing</option>
+                <option value="ko">ko</option>
+                <option value="annullato">annullato</option>
+              </select>
+            </div>
+            <div class="field"><label>Data Inserimento</label><input id="aDataIns" type="date" /></div>
+            <div class="field"><label>Data WiFi</label><input id="aDataWifi" type="date" /></div>
+            <div class="field"><label>Data TV</label><input id="aDataTv" type="date" /></div>
+            <div class="field narrow"><label>Punteggio (auto)</label><input id="aPunteggio" readonly /></div>
+            <div class="field full"><label>Note cliente</label><textarea id="aNote" placeholder="Inserisci eventuali note..."></textarea></div>
+            <div class="field full"><p class="muted" id="aNoteTipologia" style="margin:0;font-size:12.5px;"></p></div>
+          </div>
+        </form>
+      </div>
+      <div class="modalFoot">
+        <button class="btn btn-ghost" type="button" id="btnResetAdd">Reset</button>
+        <button class="btn btn-primary" type="button" id="btnSaveAdd">Salva contratto</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDIT -->
+  <div class="modalBackdrop" id="editBackdrop">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modalHead">
+        <strong>Modifica contratto</strong>
+        <button class="btn btn-ghost" type="button" id="btnCloseEdit">Chiudi</button>
+      </div>
+      <div class="modalBody">
+        <form id="editForm">
+          <div class="grid">
+            <div class="field wide"><label>Negozio / Partner</label><input id="eNegozio" required /></div>
+            <div class="field"><label>Nome</label><input id="eNome" required /></div>
+            <div class="field"><label>Cognome</label><input id="eCognome" required /></div>
+            <div class="field wide"><label>Codice Fiscale</label><input id="eCf" class="mono" required /></div>
+            <div class="field wide"><label>Codice contratto</label><input id="eCodContratto" class="mono" required /></div>
+            <div class="field">
+              <label>Tipologia</label>
+              <select id="eTipologia" required>
+                <option value="wifi">wifi</option>
+                <option value="tv">tv</option>
+                <option value="3p">3P</option>
+                <option value="4p">4P</option>
+                <option value="glass">glass</option>
+                <option value="wifi_prova">wifi+prova</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Stato</label>
+              <select id="eStato" required>
+                <option value="attivo">attivo</option>
+                <option value="tv_attivo">tv attivo</option>
+                <option value="wifi_attivo">wifi attivo</option>
+                <option value="in_attivazione">in attivazione</option>
+                <option value="washing">washing</option>
+                <option value="ko">ko</option>
+                <option value="annullato">annullato</option>
+              </select>
+            </div>
+            <div class="field"><label>Data Inserimento</label><input id="eDataIns" type="date" /></div>
+            <div class="field"><label>Data WiFi</label><input id="eDataWifi" type="date" /></div>
+            <div class="field"><label>Data TV</label><input id="eDataTv" type="date" /></div>
+            <div class="field narrow"><label>Punteggio (auto)</label><input id="ePunteggio" readonly /></div>
+            <div class="field full"><label>Note cliente</label><textarea id="eNote" placeholder="Inserisci eventuali note..."></textarea></div>
+          </div>
+        </form>
+      </div>
+      <div class="modalFoot">
+        <button class="btn btn-danger" type="button" id="btnDeleteFromEdit">Elimina</button>
+        <button class="btn btn-primary" type="button" id="btnSaveEdit">Salva modifiche</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const SUPABASE_URL = 'https://fvoiswsclfvdtxicomvk.supabase.co';
+    const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2b2lzd3NjbGZ2ZHR4aWNvbXZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NzY1NzIsImV4cCI6MjA4OTI1MjU3Mn0.udL7NS2l-v_xej36gWBEt36Z4-zCa6gVp-tlImXlbEQ';
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { persistSession: true, autoRefreshToken: true, storage: localStorage }
+    });
+
+    const SCORE_MAP = { wifi:1, tv:2, "3p":3, "4p":3, glass:2, wifi_prova:1.5 };
+    const TYPE_LABEL = { wifi:"wifi", tv:"tv", "3p":"3P", "4p":"4P", glass:"glass", wifi_prova:"wifi+prova" };
+    const STATE_LABEL = {
+      attivo:"attivo", tv_attivo:"tv attivo", wifi_attivo:"wifi attivo",
+      in_attivazione:"in attivazione", washing:"washing", ko:"ko",
+      annullato:"annullato"
+    };
+
+    const el = (id) => document.getElementById(id);
+    const esc = (str) => String(str ?? "")
+      .replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;").replaceAll("'","&#039;");
+    const clean = (s) => (s || "").trim();
+    const upper = (s) => (s || "").trim().toUpperCase();
+    const calcScore = (type) => (typeof SCORE_MAP[type] === "number") ? SCORE_MAP[type] : 0;
+    const scoreUI = (n) => String(n).replace(".", ",");
+    const round1 = (n) => Math.round((n + Number.EPSILON) * 10) / 10;
+
+    const todayISO = () => {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+    };
+    const monthKey = (iso) => {
+      if(!iso || !iso.includes("-")) return "";
+      const [y,m] = iso.split("-");
+      return (y && m) ? `${y}-${m}` : "";
+    };
+    const fmtDate = (iso) => {
+      if(!iso) return "";
+      const [y,m,d] = iso.split("-");
+      if(!y||!m||!d) return iso;
+      return `${d}/${m}/${y}`;
+    };
+    const monthLabel = (ym) => {
+      const [y,m] = (ym || "").split("-");
+      const months = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+      const idx = Number(m) - 1;
+      return (idx>=0 && idx<12) ? `${months[idx]} ${y}` : (ym || "—");
+    };
+    const uniqSorted = (arr) => [...new Set(arr.filter(Boolean))]
+      .sort((a,b)=>a.localeCompare(b, "it", {sensitivity:"base"}));
+    const stateBadgeClass = (st) => {
+      if(st === "ko") return "badge b-bad";              // rosso
+      if(st === "in_attivazione") return "badge b-warn"; // giallo
+      if(st === "attivo") return "badge b-good";         // verde
+      if(st === "washing") return "badge b-black";       // nero
+      if(st === "tv_attivo" || st === "wifi_attivo") return "badge b-neutral"; // grigio
+      if(st === "annullato") return "badge b-purple";    // viola
+      return "badge b-neutral";
+    };
+
+    function dbToRow(d){
+      return {
+        id: d.id,
+        negozio: d.negozio || "",
+        nome: d.nome || "",
+        cognome: d.cognome || "",
+        cf: d.cf || "",
+        codContratto: d.cod_contratto || "",
+        tipologia: d.tipologia || "",
+        stato: d.stato || "attivo",
+        dataIns: d.data_ins || "",
+        dataWifi: d.data_wifi || "",
+        dataTv: d.data_tv || "",
+        note: d.note || "",
+        punteggio: (typeof d.punteggio === "number") ? d.punteggio : calcScore(d.tipologia)
+      };
+    }
+    function rowToDb(r){
+      return {
+        negozio: r.negozio || null,
+        nome: r.nome || null,
+        cognome: r.cognome || null,
+        cf: r.cf || null,
+        cod_contratto: r.codContratto || null,
+        tipologia: r.tipologia || null,
+        stato: r.stato || null,
+        data_ins: r.dataIns || null,
+        data_wifi: r.dataWifi || null,
+        data_tv: r.dataTv || null,
+        note: r.note || null,
+        punteggio: (typeof r.punteggio === "number") ? r.punteggio : calcScore(r.tipologia)
+      };
+    }
+
+    let rows = [];
+    let editingId = null;
+    let currentUser = null;
+
+    const toastEl = el("toast");
+    function toast(msg, ms=2200){
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      clearTimeout(toast._t);
+      toast._t = setTimeout(()=> toastEl.classList.remove("show"), ms);
+    }
+
+    // ====== AUTH ======
+    const authView = el("authView");
+    const appView = el("appView");
+    const tabSignin = el("tabSignin");
+    const tabSignup = el("tabSignup");
+    const authForm = el("authForm");
+    const authEmail = el("authEmail");
+    const authPass = el("authPass");
+    const authSubmit = el("authSubmit");
+    const authMsg = el("authMsg");
+
+    let authMode = "signin";
+    function setAuthMode(m){
+      authMode = m;
+      tabSignin.classList.toggle("active", m === "signin");
+      tabSignup.classList.toggle("active", m === "signup");
+      authSubmit.textContent = m === "signin" ? "Accedi" : "Registrati";
+      authPass.autocomplete = m === "signin" ? "current-password" : "new-password";
+      authMsg.textContent = "";
+      authMsg.className = "authMsg";
+    }
+    tabSignin.addEventListener("click", ()=> setAuthMode("signin"));
+    tabSignup.addEventListener("click", ()=> setAuthMode("signup"));
+
+    authForm.addEventListener("submit", async (e)=>{
+      e.preventDefault();
+      authMsg.textContent = "";
+      authMsg.className = "authMsg";
+      authSubmit.disabled = true;
+      const original = authSubmit.textContent;
+      authSubmit.innerHTML = '<span class="spinner"></span>';
+
+      const email = authEmail.value.trim();
+      const password = authPass.value;
+
+      try{
+        if(authMode === "signup"){
+          const { error } = await supabase.auth.signUp({ email, password });
+          if(error) throw error;
+          authMsg.className = "authMsg ok";
+          authMsg.textContent = "Registrazione effettuata. Controlla la mail per confermare, poi accedi.";
+          setAuthMode("signin");
+        }else{
+          const { error } = await supabase.auth.signInWithPassword({ email, password });
+          if(error) throw error;
+        }
+      }catch(err){
+        authMsg.className = "authMsg err";
+        authMsg.textContent = err.message || "Errore autenticazione.";
+      }finally{
+        authSubmit.disabled = false;
+        authSubmit.textContent = original;
+      }
+    });
+
+    el("btnLogout").addEventListener("click", async ()=>{
+      await supabase.auth.signOut();
+    });
+
+    function showAuth(){
+      authView.classList.remove("hidden");
+      appView.classList.add("hidden");
+    }
+    async function showApp(){
+      authView.classList.add("hidden");
+      appView.classList.remove("hidden");
+      el("userBadge").textContent = currentUser?.email || "—";
+      await loadRowsFromDB();
+      renderAll();
+    }
+
+    supabase.auth.onAuthStateChange((_event, session) => {
+      currentUser = session?.user || null;
+      if(currentUser) showApp();
+      else showAuth();
+    });
+
+    // ====== DATA ======
+    async function loadRowsFromDB(){
+      const { data, error } = await supabase
+        .from("contracts")
+        .select("*")
+        .order("data_ins", { ascending: false, nullsFirst: false });
+      if(error){ toast("Errore caricamento: " + error.message); rows = []; return; }
+      rows = (data || []).map(dbToRow);
+    }
+
+    async function insertRowDB(r){
+      const { data, error } = await supabase.from("contracts").insert(rowToDb(r)).select().single();
+      if(error){ toast("Errore salvataggio: " + error.message); return null; }
+      return dbToRow(data);
+    }
+    async function updateRowDB(id, r){
+      const { data, error } = await supabase.from("contracts").update(rowToDb(r)).eq("id", id).select().single();
+      if(error){ toast("Errore modifica: " + error.message); return null; }
+      return dbToRow(data);
+    }
+    async function deleteRowDB(id){
+      const { error } = await supabase.from("contracts").delete().eq("id", id);
+      if(error){ toast("Errore eliminazione: " + error.message); return false; }
+      return true;
+    }
+
+    // ====== UI elements ======
+    const btnAdd = el("btnAdd");
+    const btnToggleRank = el("btnToggleRank");
+    const kpiPill = el("kpiPill");
+
+    const mMonth = el("mMonth");
+    const kpiMonthContracts = el("kpiMonthContracts");
+    const kpiMonthContractsSub = el("kpiMonthContractsSub");
+    const kpiMonthPoints = el("kpiMonthPoints");
+    const kpiMonthPointsSub = el("kpiMonthPointsSub");
+    const kpiTopShop = el("kpiTopShop");
+    const kpiTopShopSub = el("kpiTopShopSub");
+    const monthHint = el("monthHint");
+
+    const rankCard = el("rankCard");
+    const rankMode = el("rankMode");
+    const rankYearWrap = el("rankYearWrap");
+    const rankYear = el("rankYear");
+    const rankBody = el("rankBody");
+    const rankHint = el("rankHint");
+
+    const fNegozio = el("fNegozio");
+    const fMonth = el("fMonth");
+    const fTipologia = el("fTipologia");
+    const fStato = el("fStato");
+    const fSearch = el("fSearch");
+    const filtersHint = el("filtersHint");
+
+    const btnClearFilters = el("btnClearFilters");
+    const btnExportCsv = el("btnExportCsv");
+    const btnExportBackup = el("btnExportBackup");
+    const btnImportBackup = el("btnImportBackup");
+    const backupFile = el("backupFile");
+    const btnWhatsApp = el("btnWhatsApp");
+    const btnClearAll = el("btnClearAll");
+
+    const tbody = el("tbody");
+
+    const addBackdrop = el("addBackdrop");
+    const btnCloseAdd = el("btnCloseAdd");
+    const btnResetAdd = el("btnResetAdd");
+    const btnSaveAdd = el("btnSaveAdd");
+
+    const aNegozio = el("aNegozio");
+    const aNome = el("aNome");
+    const aCognome = el("aCognome");
+    const aCf = el("aCf");
+    const aCodContratto = el("aCodContratto");
+    const aTipologia = el("aTipologia");
+    const aStato = el("aStato");
+    const aDataIns = el("aDataIns");
+    const aDataWifi = el("aDataWifi");
+    const aDataTv = el("aDataTv");
+    const aPunteggio = el("aPunteggio");
+    const aNote = el("aNote");
+    const aNoteTipologia = el("aNoteTipologia");
+
+    const editBackdrop = el("editBackdrop");
+    const btnCloseEdit = el("btnCloseEdit");
+    const btnSaveEdit = el("btnSaveEdit");
+    const btnDeleteFromEdit = el("btnDeleteFromEdit");
+
+    const eNegozio = el("eNegozio");
+    const eNome = el("eNome");
+    const eCognome = el("eCognome");
+    const eCf = el("eCf");
+    const eCodContratto = el("eCodContratto");
+    const eTipologia = el("eTipologia");
+    const eStato = el("eStato");
+    const eDataIns = el("eDataIns");
+    const eDataWifi = el("eDataWifi");
+    const eDataTv = el("eDataTv");
+    const ePunteggio = el("ePunteggio");
+    const eNote = el("eNote");
+
+    // ====== LOGIC (same as original, wired to Supabase) ======
+    function buildNegozioOptions(){
+      const cur = fNegozio.value || "";
+      const list = uniqSorted(rows.map(r => r.negozio));
+      fNegozio.innerHTML = `<option value="">Tutti</option>` + list.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
+      fNegozio.value = list.includes(cur) ? cur : "";
+    }
+
+    function buildMonthOptions(selectEl, withAll = true){
+      const cur = selectEl.value || "";
+      const months = uniqSorted(rows.map(r => monthKey(r.dataIns)).filter(Boolean)).sort((a,b)=>a.localeCompare(b));
+      const nowKey = monthKey(todayISO());
+      const list = months.length ? months : [nowKey];
+      const opts = (withAll ? [`<option value="">Tutti</option>`] : [])
+        .concat(list.map(m => `<option value="${m}">${esc(monthLabel(m))}</option>`));
+      selectEl.innerHTML = opts.join("");
+      if(withAll){
+        selectEl.value = list.includes(cur) ? cur : "";
+      }else{
+        const def = list[list.length - 1];
+        selectEl.value = list.includes(cur) ? cur : def;
+      }
+    }
+
+    function buildRankYears(){
+      const years = uniqSorted(
+        rows.map(r => (r.dataIns || "").slice(0,4)).filter(y => /^\d{4}$/.test(y))
+      ).sort((a,b)=>a.localeCompare(b));
+      const curYear = (new Date()).getFullYear().toString();
+      const list = years.length ? years : [curYear];
+      const cur = rankYear.value || "";
+      rankYear.innerHTML = list.map(y=>`<option value="${y}">${y}</option>`).join("");
+      rankYear.value = list.includes(cur) ? cur : list[list.length - 1];
+    }
+
+    function getFilteredRows(){
+      const shop = (fNegozio.value || "").trim();
+      const m = (fMonth.value || "").trim();
+      const t = (fTipologia.value || "").trim();
+      const s = (fStato.value || "").trim();
+      const q = (fSearch.value || "").trim().toLowerCase();
+      let out = rows.slice();
+      if(shop) out = out.filter(r => (r.negozio || "") === shop);
+      if(m) out = out.filter(r => monthKey(r.dataIns) === m);
+      if(t) out = out.filter(r => r.tipologia === t);
+      if(s) out = out.filter(r => r.stato === s);
+      if(q){
+        out = out.filter(r => {
+          const blob = [
+            r.negozio, r.nome, r.cognome, r.cf, r.codContratto,
+            TYPE_LABEL[r.tipologia] || r.tipologia,
+            STATE_LABEL[r.stato] || r.stato,
+            r.note || ""
+          ].join(" ").toLowerCase();
+          return blob.includes(q);
+        });
+      }
+      out.sort((a,b)=>{
+        const da = a.dataIns || "";
+        const db = b.dataIns || "";
+        if(da !== db) return db.localeCompare(da);
+        return String(b.codContratto||"").localeCompare(String(a.codContratto||""));
+      });
+      return out;
+    }
+
+    function getMonthRows(ym){
+      return rows.filter(r => monthKey(r.dataIns) === ym);
+    }
+
+    function renderMonthKpi(){
+      const ym = mMonth.value || "";
+      const monthRows = getMonthRows(ym);
+      const totC = monthRows.length;
+      const totP = round1(monthRows.reduce((acc,r)=>acc + (Number(r.punteggio)||0), 0));
+      const byType = {};
+      for(const r of monthRows){
+        const k = TYPE_LABEL[r.tipologia] || r.tipologia || "—";
+        byType[k] = (byType[k] || 0) + 1;
+      }
+      const typeSummary = Object.keys(byType)
+        .sort((a,b)=>byType[b]-byType[a])
+        .map(k=>`${k}:${byType[k]}`)
+        .join(" • ") || "—";
+      const byShop = {};
+      for(const r of monthRows){
+        const shop = (r.negozio || "—").trim() || "—";
+        if(!byShop[shop]) byShop[shop] = {shop, c:0, p:0};
+        byShop[shop].c += 1;
+        byShop[shop].p += (Number(r.punteggio)||0);
+      }
+      const top = Object.values(byShop)
+        .map(x=>({ ...x, p: round1(x.p) }))
+        .sort((a,b)=> (b.p - a.p) || (b.c - a.c) || a.shop.localeCompare(b.shop, "it", {sensitivity:"base"}))[0];
+      kpiMonthContracts.textContent = String(totC);
+      kpiMonthContractsSub.textContent = typeSummary;
+      kpiMonthPoints.textContent = scoreUI(totP);
+      kpiMonthPointsSub.textContent = `Punti totali • ${monthLabel(ym)}`;
+      kpiTopShop.textContent = top ? top.shop : "—";
+      kpiTopShopSub.textContent = top ? `${top.c} contratti • ${scoreUI(top.p)} punti` : "—";
+      monthHint.textContent = `Mese calcolato dalla Data Inserimento. Se non vedi un mese, aggiungi almeno un contratto con Data Inserimento compilata.`;
+    }
+
+    function renderArchive(){
+      const filtered = getFilteredRows();
+      tbody.innerHTML = "";
+      let totalPoints = 0;
+      for(const r of filtered){
+        totalPoints += (Number(r.punteggio) || 0);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><strong>${esc(r.negozio || "")}</strong></td>
+          <td>${esc(r.nome)}</td>
+          <td>${esc(r.cognome)}</td>
+          <td class="mono">${esc(r.cf)}</td>
+          <td class="mono">${esc(r.codContratto)}</td>
+          <td><strong>${esc(TYPE_LABEL[r.tipologia] || r.tipologia || "")}</strong></td>
+          <td><span class="${stateBadgeClass(r.stato)}">${esc(STATE_LABEL[r.stato] || r.stato || "")}</span></td>
+          <td>${esc(fmtDate(r.dataIns))}</td>
+          <td>${esc(fmtDate(r.dataWifi))}</td>
+          <td>${esc(fmtDate(r.dataTv))}</td>
+          <td title="${esc(r.note || "")}">${esc(r.note || "")}</td>
+          <td class="right"><strong>${scoreUI(r.punteggio ?? 0)}</strong></td>
+          <td class="right">
+            <button class="btn btn-ghost" style="padding:8px 10px;border-radius:12px" data-edit="${r.id}">Modifica</button>
+            <button class="btn btn-danger" style="padding:8px 10px;border-radius:12px" data-del="${r.id}">Elimina</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+      tbody.querySelectorAll("[data-del]").forEach(btn=>{
+        btn.addEventListener("click", ()=> removeRow(btn.getAttribute("data-del")));
+      });
+      tbody.querySelectorAll("[data-edit]").forEach(btn=>{
+        btn.addEventListener("click", ()=> openEdit(btn.getAttribute("data-edit")));
+      });
+      const pointsRounded = round1(totalPoints);
+      kpiPill.textContent = `Totale: ${filtered.length} • Punti: ${scoreUI(pointsRounded)}`;
+      const isFiltered =
+        (fNegozio.value||"") || (fMonth.value||"") || (fTipologia.value||"") || (fStato.value||"") || (fSearch.value||"");
+      filtersHint.textContent = isFiltered
+        ? `Filtri attivi • Risultati: ${filtered.length}/${rows.length}`
+        : `Nessun filtro • Totale righe: ${rows.length}`;
+    }
+
+    function renderRanking(){
+      if(rankCard.classList.contains("hidden")) return;
+      const mode = rankMode.value;
+      const ym = mMonth.value || "";
+      const year = rankYear.value || "";
+      let scope = [];
+      let label = "";
+      if(mode === "month"){
+        scope = getMonthRows(ym);
+        label = `Classifica mensile • ${monthLabel(ym)}`;
+        rankYearWrap.classList.add("hidden");
+      }else{
+        rankYearWrap.classList.remove("hidden");
+        scope = rows.filter(r => (r.dataIns || "").startsWith(year + "-"));
+        label = `Classifica annuale • ${year}`;
+      }
+      const byShop = {};
+      for(const r of scope){
+        const shop = (r.negozio || "—").trim() || "—";
+        if(!byShop[shop]) byShop[shop] = {shop, c:0, p:0};
+        byShop[shop].c += 1;
+        byShop[shop].p += (Number(r.punteggio)||0);
+      }
+      const list = Object.values(byShop)
+        .map(x=>({ ...x, p: round1(x.p) }))
+        .sort((a,b)=> (b.p - a.p) || (b.c - a.c) || a.shop.localeCompare(b.shop, "it", {sensitivity:"base"}));
+      rankBody.innerHTML = list.length
+        ? list.map(s=>`
+            <tr>
+              <td><strong>${esc(s.shop)}</strong></td>
+              <td class="right">${s.c}</td>
+              <td class="right"><strong>${scoreUI(s.p)}</strong></td>
+            </tr>`).join("")
+        : `<tr><td colspan="3" class="muted">Nessun dato nel periodo selezionato.</td></tr>`;
+      rankHint.textContent = `${label} • Negozi: ${list.length} • Contratti: ${scope.length}`;
+    }
+
+    function renderAll(){
+      buildNegozioOptions();
+      buildMonthOptions(fMonth, true);
+      buildMonthOptions(mMonth, false);
+      buildRankYears();
+      renderMonthKpi();
+      renderArchive();
+      renderRanking();
+    }
+
+    // ====== ADD ======
+    function openAdd(){
+      aDataIns.value = aDataIns.value || todayISO();
+      aPunteggio.value = "";
+      aNoteTipologia.textContent = "";
+      addBackdrop.classList.add("show");
+      setTimeout(()=> aNegozio.focus(), 50);
+    }
+    function closeAdd(){ addBackdrop.classList.remove("show"); }
+    function resetAdd(){
+      aNegozio.value = ""; aNome.value = ""; aCognome.value = ""; aCf.value = "";
+      aCodContratto.value = ""; aTipologia.value = ""; aStato.value = "attivo";
+      aDataIns.value = todayISO(); aDataWifi.value = ""; aDataTv.value = "";
+      aPunteggio.value = ""; aNote.value = ""; aNoteTipologia.textContent = "";
+      aNegozio.focus();
+    }
+    function updateAddScore(){
+      const type = aTipologia.value;
+      const score = calcScore(type);
+      aPunteggio.value = type ? scoreUI(score) : "";
+      aNoteTipologia.textContent = type ? `Punteggio per "${TYPE_LABEL[type]}": ${scoreUI(score)}` : "";
+    }
+    async function saveAdd(){
+      if(!clean(aNegozio.value) || !clean(aNome.value) || !clean(aCognome.value) ||
+         !clean(aCodContratto.value) || !upper(aCf.value) || !aTipologia.value){
+        alert("Compila tutti i campi obbligatori: Negozio, Nome, Cognome, CF, Cod. Contratto, Tipologia.");
+        return;
+      }
+      const type = aTipologia.value;
+      const obj = {
+        negozio: clean(aNegozio.value), nome: clean(aNome.value), cognome: clean(aCognome.value),
+        cf: upper(aCf.value), codContratto: clean(aCodContratto.value), tipologia: type,
+        stato: aStato.value || "attivo", dataIns: aDataIns.value || todayISO(),
+        dataWifi: aDataWifi.value || "", dataTv: aDataTv.value || "",
+        note: clean(aNote.value), punteggio: calcScore(type)
+      };
+      btnSaveAdd.disabled = true;
+      const saved = await insertRowDB(obj);
+      btnSaveAdd.disabled = false;
+      if(!saved) return;
+      rows.unshift(saved);
+      closeAdd();
+      resetAdd();
+      renderAll();
+      toast("Contratto salvato");
+    }
+
+    // ====== EDIT ======
+    function openEdit(id){
+      const r = rows.find(x => x.id === id);
+      if(!r) return;
+      editingId = id;
+      eNegozio.value = r.negozio || ""; eNome.value = r.nome || ""; eCognome.value = r.cognome || "";
+      eCf.value = r.cf || ""; eCodContratto.value = r.codContratto || "";
+      eTipologia.value = r.tipologia || "wifi"; eStato.value = r.stato || "attivo";
+      eDataIns.value = r.dataIns || ""; eDataWifi.value = r.dataWifi || ""; eDataTv.value = r.dataTv || "";
+      eNote.value = r.note || ""; ePunteggio.value = scoreUI(calcScore(eTipologia.value));
+      editBackdrop.classList.add("show");
+    }
+    function closeEdit(){ editingId = null; editBackdrop.classList.remove("show"); }
+    function updateEditScore(){ ePunteggio.value = scoreUI(calcScore(eTipologia.value)); }
+    async function saveEdit(){
+      if(!editingId) return;
+      const idx = rows.findIndex(x => x.id === editingId);
+      if(idx < 0) return;
+      if(!clean(eNegozio.value) || !clean(eNome.value) || !clean(eCognome.value) ||
+         !clean(eCodContratto.value) || !upper(eCf.value)){
+        alert("Compila tutti i campi obbligatori (Negozio, Nome, Cognome, Cod. Contratto, Codice Fiscale).");
+        return;
+      }
+      const type = eTipologia.value;
+      const patch = {
+        negozio: clean(eNegozio.value), nome: clean(eNome.value), cognome: clean(eCognome.value),
+        cf: upper(eCf.value), codContratto: clean(eCodContratto.value), tipologia: type,
+        stato: eStato.value || "attivo",
+        dataIns: eDataIns.value || rows[idx].dataIns || todayISO(),
+        dataWifi: eDataWifi.value || "", dataTv: eDataTv.value || "",
+        note: clean(eNote.value), punteggio: calcScore(type)
+      };
+      btnSaveEdit.disabled = true;
+      const saved = await updateRowDB(editingId, patch);
+      btnSaveEdit.disabled = false;
+      if(!saved) return;
+      rows[idx] = saved;
+      closeEdit();
+      renderAll();
+      toast("Modifiche salvate");
+    }
+    function deleteFromEdit(){
+      if(!editingId) return;
+      const id = editingId;
+      closeEdit();
+      removeRow(id);
+    }
+    async function removeRow(id){
+      if(!confirm("Eliminare questo contratto?")) return;
+      const ok = await deleteRowDB(id);
+      if(!ok) return;
+      rows = rows.filter(r => r.id !== id);
+      renderAll();
+      toast("Contratto eliminato");
+    }
+
+    // ====== EXPORT / WHATSAPP ======
+    function csvVal(v){
+      const s = String(v ?? "");
+      if(s.includes('"') || s.includes(",") || s.includes("\n")) return `"${s.replaceAll('"','""')}"`;
+      return s;
+    }
+    function exportCsvCurrent(){
+      const filtered = getFilteredRows();
+      if(!filtered.length){ alert("Nessun dato da esportare con i filtri attuali."); return; }
+      const shop = (fNegozio.value || "").trim();
+      const m = (fMonth.value || "").trim();
+      const base = shop ? `sky_contratti_${shop}` : `sky_contratti_filtrati`;
+      const withMonth = m ? `${base}_${m}` : base;
+      const safeName = withMonth.replace(/[^\w\-]+/g, "_").slice(0, 90);
+      const filename = `${safeName}.csv`;
+      const headers = ["Negozio","Nome","Cognome","Codice Fiscale","Codice Contratto","Tipologia","Stato","Data Inser.","Data WiFi","Data TV","Note","Punti"];
+      const lines = [ headers.map(csvVal).join(",") ];
+      for(const r of filtered){
+        lines.push([
+          r.negozio || "", r.nome || "", r.cognome || "", r.cf || "", r.codContratto || "",
+          TYPE_LABEL[r.tipologia] || r.tipologia || "",
+          STATE_LABEL[r.stato] || r.stato || "",
+          fmtDate(r.dataIns) || "", fmtDate(r.dataWifi) || "", fmtDate(r.dataTv) || "",
+          r.note || "", String(r.punteggio ?? 0).replace(".", ",")
+        ].map(csvVal).join(","));
+      }
+      const blob = new Blob([lines.join("\n")], {type:"text/csv;charset=utf-8"});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    }
+    function exportBackup(){
+      const payload = {
+        app: "sky_contracts_partner", version: "2.0",
+        exported_at: new Date().toISOString(), rows: rows
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const now = new Date();
+      const filename = `sky_backup_${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}_${String(now.getHours()).padStart(2,"0")}-${String(now.getMinutes()).padStart(2,"0")}.json`;
+      const a = document.createElement("a");
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    }
+    async function handleImportBackup(file){
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try{
+          const parsed = JSON.parse(reader.result);
+          let importedRows = null;
+          if(Array.isArray(parsed)) importedRows = parsed;
+          else if(parsed && Array.isArray(parsed.rows)) importedRows = parsed.rows;
+          if(!Array.isArray(importedRows)){ alert("File backup non valido."); return; }
+          if(!confirm(`Importare ${importedRows.length} righe nel tuo archivio cloud? (i tuoi dati attuali restano)`)) return;
+          const toInsert = importedRows.map(r => rowToDb({
+            negozio: r.negozio || "", nome: r.nome || "", cognome: r.cognome || "",
+            cf: r.cf || "", codContratto: r.codContratto || "",
+            tipologia: r.tipologia || "", stato: r.stato || "attivo",
+            dataIns: r.dataIns || "", dataWifi: r.dataWifi || "", dataTv: r.dataTv || "",
+            note: r.note || "", punteggio: (typeof r.punteggio === "number") ? r.punteggio : calcScore(r.tipologia)
+          }));
+          const { data, error } = await supabase.from("contracts").insert(toInsert).select();
+          if(error){ alert("Errore import: " + error.message); return; }
+          const inserted = (data || []).map(dbToRow);
+          rows = inserted.concat(rows);
+          renderAll();
+          toast(`Importate ${inserted.length} righe`);
+        }catch(e){
+          alert("Errore durante l'importazione del backup.");
+        }finally{
+          backupFile.value = "";
+        }
+      };
+      reader.readAsText(file);
+    }
+    function exportPdfCurrent(){
+      const filtered = getFilteredRows();
+      if(!filtered.length){ alert("Nessun dato da stampare con i filtri attuali."); return; }
+      if(!window.jspdf || !window.jspdf.jsPDF){ alert("Libreria PDF non caricata. Ricarica la pagina."); return; }
+
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+
+      const shop = (fNegozio.value || "").trim();
+      const m = (fMonth.value || "").trim();
+      const tip = (fTipologia.value || "").trim();
+      const st = (fStato.value || "").trim();
+      const q = (fSearch.value || "").trim();
+
+      const total = filtered.length;
+      const totalPoints = round1(filtered.reduce((acc,r)=>acc + (Number(r.punteggio)||0), 0));
+
+      const byType = {};
+      for(const r of filtered){
+        const k = TYPE_LABEL[r.tipologia] || r.tipologia || "—";
+        byType[k] = (byType[k] || 0) + 1;
+      }
+      const typeSummary = Object.keys(byType)
+        .sort((a,b)=>byType[b]-byType[a])
+        .map(k=>`${k}: ${byType[k]}`)
+        .join("  •  ") || "—";
+
+      // HEADER gradient band
+      doc.setFillColor(207, 1, 207);
+      doc.rect(0, 0, pageW, 22, "F");
+      doc.setFillColor(106, 0, 255);
+      doc.rect(pageW/2, 0, pageW/2, 22, "F");
+
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(18);
+      doc.text("SKY • Report Contratti Partner", 10, 13);
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      const now = new Date();
+      const genStr = `${String(now.getDate()).padStart(2,"0")}/${String(now.getMonth()+1).padStart(2,"0")}/${now.getFullYear()} ${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+      doc.text(`Generato: ${genStr}`, pageW - 10, 13, { align: "right" });
+
+      // FILTERS box
+      let y = 30;
+      doc.setTextColor(15, 23, 42);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("Filtri applicati", 10, y);
+      y += 2;
+      doc.setDrawColor(229, 231, 235);
+      doc.setLineWidth(0.3);
+      doc.line(10, y, pageW - 10, y);
+      y += 5;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9.5);
+      doc.setTextColor(51, 65, 85);
+
+      const filterParts = [];
+      filterParts.push(`Negozio: ${shop || "Tutti"}`);
+      filterParts.push(`Mese: ${m ? monthLabel(m) : "Tutti"}`);
+      filterParts.push(`Tipologia: ${tip ? (TYPE_LABEL[tip] || tip) : "Tutte"}`);
+      filterParts.push(`Stato: ${st ? (STATE_LABEL[st] || st) : "Tutti"}`);
+      if(q) filterParts.push(`Ricerca: "${q}"`);
+
+      const colW = (pageW - 20) / 2;
+      filterParts.forEach((p, i) => {
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        doc.text(p, 10 + col * colW, y + row * 5);
+      });
+      y += Math.ceil(filterParts.length / 2) * 5 + 3;
+
+      // SUMMARY box
+      doc.setFillColor(248, 244, 255);
+      doc.setDrawColor(207, 1, 207);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(10, y, pageW - 20, 18, 2, 2, "FD");
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139);
+      doc.text("TOTALE CONTRATTI", 15, y + 6);
+      doc.text("TOTALE PUNTI", 15 + (pageW - 20) / 3, y + 6);
+      doc.text("RIEPILOGO TIPOLOGIE", 15 + 2 * (pageW - 20) / 3, y + 6);
+
+      doc.setFontSize(14);
+      doc.setTextColor(15, 23, 42);
+      doc.text(String(total), 15, y + 14);
+      doc.text(scoreUI(totalPoints), 15 + (pageW - 20) / 3, y + 14);
+
+      doc.setFontSize(9.5);
+      doc.setFont("helvetica", "normal");
+      const summaryLines = doc.splitTextToSize(typeSummary, (pageW - 20) / 3 - 10);
+      doc.text(summaryLines.slice(0, 2), 15 + 2 * (pageW - 20) / 3, y + 11);
+
+      y += 24;
+
+      // TABLE
+      const head = [[
+        "Negozio","Nome","Cognome","Cod. Fiscale","Cod. Contratto",
+        "Tipologia","Stato","Data Inser.","Data WiFi","Data TV","Note","Punti"
+      ]];
+      const body = filtered.map(r => [
+        r.negozio || "",
+        r.nome || "",
+        r.cognome || "",
+        r.cf || "",
+        r.codContratto || "",
+        TYPE_LABEL[r.tipologia] || r.tipologia || "",
+        STATE_LABEL[r.stato] || r.stato || "",
+        fmtDate(r.dataIns) || "",
+        fmtDate(r.dataWifi) || "",
+        fmtDate(r.dataTv) || "",
+        r.note || "",
+        scoreUI(r.punteggio ?? 0)
+      ]);
+
+      doc.autoTable({
+        head, body,
+        startY: y,
+        margin: { left: 10, right: 10, bottom: 18 },
+        styles: {
+          font: "helvetica",
+          fontSize: 8,
+          cellPadding: 2.2,
+          overflow: "linebreak",
+          valign: "middle",
+          textColor: [15, 23, 42],
+          lineColor: [229, 231, 235],
+          lineWidth: 0.1
+        },
+        headStyles: {
+          fillColor: [207, 1, 207],
+          textColor: [255, 255, 255],
+          fontStyle: "bold",
+          fontSize: 8.5,
+          halign: "left"
+        },
+        alternateRowStyles: { fillColor: [249, 250, 251] },
+        columnStyles: {
+          0: { cellWidth: 26, fontStyle: "bold" },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 22 },
+          3: { cellWidth: 30 },
+          4: { cellWidth: 26 },
+          5: { cellWidth: 18, fontStyle: "bold" },
+          6: { cellWidth: 20 },
+          7: { cellWidth: 19 },
+          8: { cellWidth: 19 },
+          9: { cellWidth: 19 },
+          10: { cellWidth: "auto" },
+          11: { cellWidth: 13, halign: "right", fontStyle: "bold" }
+        },
+        didParseCell: (data) => {
+          if(data.section === "body" && data.column.index === 6){
+            const v = data.cell.raw;
+            if(v === "ko"){ data.cell.styles.textColor = [127, 29, 29]; data.cell.styles.fillColor = [254, 226, 226]; }                 // rosso
+            else if(v === "in attivazione"){ data.cell.styles.textColor = [124, 45, 18]; data.cell.styles.fillColor = [254, 243, 199]; } // giallo
+            else if(v === "attivo"){ data.cell.styles.textColor = [6, 95, 70]; data.cell.styles.fillColor = [209, 250, 229]; }           // verde
+            else if(v === "washing"){ data.cell.styles.textColor = [255, 255, 255]; data.cell.styles.fillColor = [15, 23, 42]; data.cell.styles.fontStyle = "bold"; } // nero
+            else if(v === "tv attivo" || v === "wifi attivo"){ data.cell.styles.textColor = [51, 65, 85]; data.cell.styles.fillColor = [226, 232, 240]; } // grigio
+            else if(v === "annullato"){ data.cell.styles.textColor = [91, 33, 182]; data.cell.styles.fillColor = [237, 233, 254]; }       // viola
+          }
+        },
+        didDrawPage: (data) => {
+          const str = `Pagina ${doc.internal.getNumberOfPages()}`;
+          doc.setFontSize(8.5);
+          doc.setTextColor(100, 116, 139);
+          doc.setFont("helvetica", "normal");
+          doc.text("MARIO ISERNIA  •  Area Manager  •  Multibrand - e2k", 10, pageH - 8);
+          doc.text(str, pageW - 10, pageH - 8, { align: "right" });
+          doc.setDrawColor(229, 231, 235);
+          doc.setLineWidth(0.3);
+          doc.line(10, pageH - 12, pageW - 10, pageH - 12);
+        }
+      });
+
+      const base = shop ? `sky_report_${shop}` : `sky_report_filtrati`;
+      const withMonth = m ? `${base}_${m}` : base;
+      const safeName = withMonth.replace(/[^\w\-]+/g, "_").slice(0, 90);
+      doc.save(`${safeName}.pdf`);
+    }
+
+    function buildWhatsAppReport(){
+      const filtered = getFilteredRows();
+      if(!filtered.length) return null;
+      const shop = (fNegozio.value || "").trim();
+      const m = (fMonth.value || "").trim();
+      const headParts = [];
+      headParts.push(shop ? `*REPORT SKY — ${shop}*` : `*REPORT SKY — FILTRI ATTIVI*`);
+      if(m) headParts.push(`_${monthLabel(m)}_`);
+      const total = filtered.length;
+      const totalPoints = round1(filtered.reduce((acc,r)=>acc + (Number(r.punteggio)||0), 0));
+      const list = filtered.slice(0, 60).map(r => {
+        const fullName = `${(r.nome||"").trim()} ${(r.cognome||"").trim()}`.trim();
+        const tipo = TYPE_LABEL[r.tipologia] || r.tipologia || "—";
+        const st = STATE_LABEL[r.stato] || r.stato || "—";
+        const dWifi = fmtDate(r.dataWifi) || "—";
+        const dTv = fmtDate(r.dataTv) || "—";
+        const pts = scoreUI(r.punteggio ?? 0);
+        const note = (r.note || "").trim();
+        const noteLine = note ? `\n   📝 _Note:_ ${note}` : "";
+        return `• *${fullName}* | ${tipo} | ${st} | WiFi: ${dWifi} | TV: ${dTv} | ${pts}p${noteLine}`;
+      }).join("\n");
+      const extra = filtered.length > 60 ? `\n\n_(Mostrati solo i primi 60 contratti)_` : "";
+      return [
+        ...headParts, ``,
+        `*Totale contratti:* ${total}`,
+        `*Totale punti:* ${scoreUI(totalPoints)}`,
+        ``, `*Elenco:*`, list || "—", extra, ``,
+        `MARIO ISERNIA`, `Area Manager`, `Multibrand - e2k`
+      ].join("\n");
+    }
+    function sendWhatsAppReport(){
+      const txt = buildWhatsAppReport();
+      if(!txt){ alert("Nessun dato da inviare con i filtri attuali."); return; }
+      const url = "https://wa.me/?text=" + encodeURIComponent(txt);
+      const w = window.open(url, "_blank");
+      if(!w) window.location.href = url;
+    }
+
+    // ====== WIRE UP ======
+    btnAdd.addEventListener("click", openAdd);
+    btnCloseAdd.addEventListener("click", closeAdd);
+    btnResetAdd.addEventListener("click", resetAdd);
+    btnSaveAdd.addEventListener("click", saveAdd);
+    addBackdrop.addEventListener("click", (e)=>{ if(e.target === addBackdrop) closeAdd(); });
+    aTipologia.addEventListener("change", updateAddScore);
+
+    btnCloseEdit.addEventListener("click", closeEdit);
+    btnSaveEdit.addEventListener("click", saveEdit);
+    btnDeleteFromEdit.addEventListener("click", deleteFromEdit);
+    editBackdrop.addEventListener("click", (e)=>{ if(e.target === editBackdrop) closeEdit(); });
+    eTipologia.addEventListener("change", updateEditScore);
+
+    const rerender = () => renderAll();
+    [fNegozio, fMonth, fTipologia, fStato].forEach(x => x.addEventListener("change", rerender));
+    fSearch.addEventListener("input", rerender);
+
+    btnClearFilters.addEventListener("click", ()=>{
+      fNegozio.value = ""; fMonth.value = ""; fTipologia.value = "";
+      fStato.value = ""; fSearch.value = "";
+      renderAll();
+    });
+
+    btnExportCsv.addEventListener("click", exportCsvCurrent);
+    el("btnExportPdf").addEventListener("click", exportPdfCurrent);
+    btnExportBackup.addEventListener("click", exportBackup);
+    btnImportBackup.addEventListener("click", ()=> backupFile.click());
+    backupFile.addEventListener("change", (e)=> handleImportBackup(e.target.files?.[0]));
+    btnWhatsApp.addEventListener("click", sendWhatsAppReport);
+
+    btnClearAll.addEventListener("click", async ()=>{
+      if(!confirm("Vuoi svuotare TUTTO l'archivio contratti? (azione irreversibile)")) return;
+      const { error } = await supabase.from("contracts").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      if(error){ alert("Errore: " + error.message); return; }
+      rows = [];
+      renderAll();
+      toast("Archivio svuotato");
+    });
+
+    mMonth.addEventListener("change", ()=>{
+      renderMonthKpi();
+      renderRanking();
+      buildMonthOptions(fMonth, true);
+    });
+
+    btnToggleRank.addEventListener("click", ()=>{
+      rankCard.classList.toggle("hidden");
+      if(!rankCard.classList.contains("hidden")){
+        buildRankYears();
+        renderRanking();
+      }
+    });
+
+    rankMode.addEventListener("change", ()=>{
+      buildRankYears();
+      renderRanking();
+    });
+    rankYear.addEventListener("change", renderRanking);
+
+    aDataIns.value = todayISO();
+
+    // ====== BOOT ======
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      currentUser = session?.user || null;
+      if(currentUser) await showApp();
+      else showAuth();
+    })();
+
+    // ====== SERVICE WORKER ======
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(() => {});
+      });
+    }
+  </script>
+
+</body>
+</html>
