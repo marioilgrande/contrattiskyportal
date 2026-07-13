@@ -517,10 +517,10 @@
             <div class="field">
               <label>Stato</label>
               <select id="aStato" required>
+                <option value="in_attivazione" selected>in attivazione</option>
                 <option value="attivo">attivo</option>
                 <option value="tv_attivo">tv attivo</option>
                 <option value="wifi_attivo">wifi attivo</option>
-                <option value="in_attivazione">in attivazione</option>
                 <option value="washing">washing</option>
                 <option value="ko">ko</option>
                 <option value="annullato">annullato</option>
@@ -1100,7 +1100,7 @@
     function closeAdd(){ addBackdrop.classList.remove("show"); }
     function resetAdd(){
       aNegozio.value = ""; aNome.value = ""; aCognome.value = ""; aCf.value = "";
-      aCodContratto.value = ""; aTipologia.value = ""; aStato.value = "attivo";
+      aCodContratto.value = ""; aTipologia.value = ""; aStato.value = "in_attivazione";
       aDataIns.value = todayISO(); aDataWifi.value = ""; aDataTv.value = "";
       aPunteggio.value = ""; aNote.value = ""; aNoteTipologia.textContent = "";
       aNegozio.focus();
@@ -1121,7 +1121,7 @@
       const obj = {
         negozio: canonicalNegozio(aNegozio.value), nome: clean(aNome.value), cognome: clean(aCognome.value),
         cf: upper(aCf.value), codContratto: clean(aCodContratto.value), tipologia: type,
-        stato: aStato.value || "attivo", dataIns: aDataIns.value || todayISO(),
+        stato: aStato.value || "in_attivazione", dataIns: aDataIns.value || todayISO(),
         dataWifi: aDataWifi.value || "", dataTv: aDataTv.value || "",
         note: clean(aNote.value), punteggio: calcScore(type)
       };
