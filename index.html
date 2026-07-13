@@ -497,7 +497,7 @@
       <div class="modalBody">
         <form id="addForm" autocomplete="off">
           <div class="grid">
-            <div class="field wide"><label>Negozio / Partner</label><input id="aNegozio" required placeholder="Es. Jenio Torino / AF Store / ..." /></div>
+            <div class="field wide"><label>Negozio / Partner</label><input id="aNegozio" list="negoziKnown" autocomplete="off" required placeholder="Es. Jenio Torino / AF Store / ..." /></div>
             <div class="field"><label>Nome</label><input id="aNome" required /></div>
             <div class="field"><label>Cognome</label><input id="aCognome" required /></div>
             <div class="field wide"><label>Codice Fiscale</label><input id="aCf" class="mono" required /></div>
@@ -553,7 +553,7 @@
       <div class="modalBody">
         <form id="editForm">
           <div class="grid">
-            <div class="field wide"><label>Negozio / Partner</label><input id="eNegozio" required /></div>
+            <div class="field wide"><label>Negozio / Partner</label><input id="eNegozio" list="negoziKnown" autocomplete="off" required /></div>
             <div class="field"><label>Nome</label><input id="eNome" required /></div>
             <div class="field"><label>Cognome</label><input id="eCognome" required /></div>
             <div class="field wide"><label>Codice Fiscale</label><input id="eCf" class="mono" required /></div>
@@ -596,6 +596,8 @@
       </div>
     </div>
   </div>
+
+  <datalist id="negoziKnown"></datalist>
 
   <div class="toast" id="toast"></div>
 
@@ -650,6 +652,15 @@
     };
     const uniqSorted = (arr) => [...new Set(arr.filter(Boolean))]
       .sort((a,b)=>a.localeCompare(b, "it", {sensitivity:"base"}));
+    const normKey = (s) => (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+    function canonicalNegozio(input){
+      const raw = clean(input);
+      if(!raw) return raw;
+      const key = normKey(raw);
+      const existing = rows.map(r => r.negozio).filter(Boolean);
+      const hit = existing.find(n => normKey(n) === key);
+      return hit || raw;
+    }
     const stateBadgeClass = (st) => {
       if(st === "ko" || st === "cessato") return "badge b-bad"; // rosso
       if(st === "in_attivazione") return "badge b-warn";        // giallo
@@ -890,6 +901,8 @@
       const list = uniqSorted(rows.map(r => r.negozio));
       fNegozio.innerHTML = `<option value="">Tutti</option>` + list.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join("");
       fNegozio.value = list.includes(cur) ? cur : "";
+      const dl = el("negoziKnown");
+      if(dl) dl.innerHTML = list.map(n => `<option value="${esc(n)}"></option>`).join("");
     }
 
     function buildMonthOptions(selectEl, withAll = true){
@@ -1106,7 +1119,7 @@
       }
       const type = aTipologia.value;
       const obj = {
-        negozio: clean(aNegozio.value), nome: clean(aNome.value), cognome: clean(aCognome.value),
+        negozio: canonicalNegozio(aNegozio.value), nome: clean(aNome.value), cognome: clean(aCognome.value),
         cf: upper(aCf.value), codContratto: clean(aCodContratto.value), tipologia: type,
         stato: aStato.value || "attivo", dataIns: aDataIns.value || todayISO(),
         dataWifi: aDataWifi.value || "", dataTv: aDataTv.value || "",
@@ -1148,7 +1161,7 @@
       }
       const type = eTipologia.value;
       const patch = {
-        negozio: clean(eNegozio.value), nome: clean(eNome.value), cognome: clean(eCognome.value),
+        negozio: canonicalNegozio(eNegozio.value), nome: clean(eNome.value), cognome: clean(eCognome.value),
         cf: upper(eCf.value), codContratto: clean(eCodContratto.value), tipologia: type,
         stato: eStato.value || "attivo",
         dataIns: eDataIns.value || rows[idx].dataIns || todayISO(),
