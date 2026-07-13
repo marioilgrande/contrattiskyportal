@@ -324,6 +324,10 @@
             <label>Mese di riferimento</label>
             <select id="mMonth"></select>
           </div>
+          <div class="field wide">
+            <label>Report PDF automatico</label>
+            <button class="btn btn-primary" type="button" id="btnMonthReports" style="width:100%">📅 Report mese (1 PDF per negozio)</button>
+          </div>
           <div class="field full">
             <div class="kpiRow">
               <div class="kpi">
@@ -433,6 +437,7 @@
                 <option value="washing">washing</option>
                 <option value="ko">ko</option>
                 <option value="annullato">annullato</option>
+                <option value="cessato">cessato</option>
               </select>
             </div>
             <div class="field full">
@@ -519,6 +524,7 @@
                 <option value="washing">washing</option>
                 <option value="ko">ko</option>
                 <option value="annullato">annullato</option>
+                <option value="cessato">cessato</option>
               </select>
             </div>
             <div class="field"><label>Data Inserimento</label><input id="aDataIns" type="date" /></div>
@@ -573,6 +579,7 @@
                 <option value="washing">washing</option>
                 <option value="ko">ko</option>
                 <option value="annullato">annullato</option>
+                <option value="cessato">cessato</option>
               </select>
             </div>
             <div class="field"><label>Data Inserimento</label><input id="eDataIns" type="date" /></div>
@@ -607,7 +614,7 @@
     const STATE_LABEL = {
       attivo:"attivo", tv_attivo:"tv attivo", wifi_attivo:"wifi attivo",
       in_attivazione:"in attivazione", washing:"washing", ko:"ko",
-      annullato:"annullato"
+      annullato:"annullato", cessato:"cessato"
     };
 
     const el = (id) => document.getElementById(id);
@@ -644,12 +651,12 @@
     const uniqSorted = (arr) => [...new Set(arr.filter(Boolean))]
       .sort((a,b)=>a.localeCompare(b, "it", {sensitivity:"base"}));
     const stateBadgeClass = (st) => {
-      if(st === "ko") return "badge b-bad";              // rosso
-      if(st === "in_attivazione") return "badge b-warn"; // giallo
-      if(st === "attivo") return "badge b-good";         // verde
-      if(st === "washing") return "badge b-black";       // nero
+      if(st === "ko" || st === "cessato") return "badge b-bad"; // rosso
+      if(st === "in_attivazione") return "badge b-warn";        // giallo
+      if(st === "attivo") return "badge b-good";                // verde
+      if(st === "washing") return "badge b-black";              // nero
       if(st === "tv_attivo" || st === "wifi_attivo") return "badge b-neutral"; // grigio
-      if(st === "annullato") return "badge b-purple";    // viola
+      if(st === "annullato") return "badge b-purple";           // viola
       return "badge b-neutral";
     };
 
@@ -1251,10 +1258,8 @@
       };
       reader.readAsText(file);
     }
-    function exportPdfCurrent(){
-      const filtered = getFilteredRows();
-      if(!filtered.length){ alert("Nessun dato da stampare con i filtri attuali."); return; }
-      if(!window.jspdf || !window.jspdf.jsPDF){ alert("Libreria PDF non caricata. Ricarica la pagina."); return; }
+    function buildAndSavePdf(rowsList, filterInfo, filename){
+      if(!window.jspdf || !window.jspdf.jsPDF){ alert("Libreria PDF non caricata. Ricarica la pagina."); return false; }
 
       const { jsPDF } = window.jspdf;
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
@@ -1262,11 +1267,12 @@
       const pageW = doc.internal.pageSize.getWidth();
       const pageH = doc.internal.pageSize.getHeight();
 
-      const shop = (fNegozio.value || "").trim();
-      const m = (fMonth.value || "").trim();
-      const tip = (fTipologia.value || "").trim();
-      const st = (fStato.value || "").trim();
-      const q = (fSearch.value || "").trim();
+      const shop = (filterInfo.shop || "").trim();
+      const m = (filterInfo.month || "").trim();
+      const tip = (filterInfo.tipologia || "").trim();
+      const st = (filterInfo.stato || "").trim();
+      const q = (filterInfo.search || "").trim();
+      const filtered = rowsList;
 
       const total = filtered.length;
       const totalPoints = round1(filtered.reduce((acc,r)=>acc + (Number(r.punteggio)||0), 0));
@@ -1413,7 +1419,7 @@
         didParseCell: (data) => {
           if(data.section === "body" && data.column.index === 6){
             const v = data.cell.raw;
-            if(v === "ko"){ data.cell.styles.textColor = [127, 29, 29]; data.cell.styles.fillColor = [254, 226, 226]; }                 // rosso
+            if(v === "ko" || v === "cessato"){ data.cell.styles.textColor = [127, 29, 29]; data.cell.styles.fillColor = [254, 226, 226]; } // rosso
             else if(v === "in attivazione"){ data.cell.styles.textColor = [124, 45, 18]; data.cell.styles.fillColor = [254, 243, 199]; } // giallo
             else if(v === "attivo"){ data.cell.styles.textColor = [6, 95, 70]; data.cell.styles.fillColor = [209, 250, 229]; }           // verde
             else if(v === "washing"){ data.cell.styles.textColor = [255, 255, 255]; data.cell.styles.fillColor = [15, 23, 42]; data.cell.styles.fontStyle = "bold"; } // nero
@@ -1434,10 +1440,57 @@
         }
       });
 
-      const base = shop ? `sky_report_${shop}` : `sky_report_filtrati`;
-      const withMonth = m ? `${base}_${m}` : base;
+      doc.save(filename);
+      return true;
+    }
+
+    function exportPdfCurrent(){
+      const filtered = getFilteredRows();
+      if(!filtered.length){ alert("Nessun dato da stampare con i filtri attuali."); return; }
+      const filterInfo = {
+        shop: (fNegozio.value || "").trim(),
+        month: (fMonth.value || "").trim(),
+        tipologia: (fTipologia.value || "").trim(),
+        stato: (fStato.value || "").trim(),
+        search: (fSearch.value || "").trim()
+      };
+      const base = filterInfo.shop ? `sky_report_${filterInfo.shop}` : `sky_report_filtrati`;
+      const withMonth = filterInfo.month ? `${base}_${filterInfo.month}` : base;
       const safeName = withMonth.replace(/[^\w\-]+/g, "_").slice(0, 90);
-      doc.save(`${safeName}.pdf`);
+      buildAndSavePdf(filtered, filterInfo, `${safeName}.pdf`);
+    }
+
+    function generateMonthReports(){
+      const ym = (mMonth.value || "").trim();
+      if(!ym){ alert("Seleziona un mese di riferimento."); return; }
+      const monthRows = getMonthRows(ym);
+      if(!monthRows.length){ alert(`Nessun contratto per ${monthLabel(ym)}.`); return; }
+
+      const byShop = {};
+      for(const r of monthRows){
+        const shop = (r.negozio || "—").trim() || "—";
+        (byShop[shop] = byShop[shop] || []).push(r);
+      }
+      const shops = Object.keys(byShop).sort((a,b)=>a.localeCompare(b, "it", {sensitivity:"base"}));
+
+      if(!confirm(`Generare ${shops.length} PDF (uno per ogni negozio) per ${monthLabel(ym)}?\n\nIl browser potrebbe chiedere il permesso per scaricare più file.`)) return;
+
+      let idx = 0;
+      const step = () => {
+        if(idx >= shops.length){ toast(`Generati ${shops.length} report per ${monthLabel(ym)}`); return; }
+        const shop = shops[idx];
+        const shopRows = byShop[shop].slice().sort((a,b)=>{
+          const da = a.dataIns || "", db = b.dataIns || "";
+          if(da !== db) return db.localeCompare(da);
+          return String(b.codContratto||"").localeCompare(String(a.codContratto||""));
+        });
+        const filterInfo = { shop, month: ym, tipologia: "", stato: "", search: "" };
+        const safeName = `sky_report_${shop}_${ym}`.replace(/[^\w\-]+/g, "_").slice(0, 90);
+        buildAndSavePdf(shopRows, filterInfo, `${safeName}.pdf`);
+        idx++;
+        setTimeout(step, 400);
+      };
+      step();
     }
 
     function buildWhatsAppReport(){
@@ -1504,6 +1557,7 @@
 
     btnExportCsv.addEventListener("click", exportCsvCurrent);
     el("btnExportPdf").addEventListener("click", exportPdfCurrent);
+    el("btnMonthReports").addEventListener("click", generateMonthReports);
     btnExportBackup.addEventListener("click", exportBackup);
     btnImportBackup.addEventListener("click", ()=> backupFile.click());
     backupFile.addEventListener("change", (e)=> handleImportBackup(e.target.files?.[0]));
