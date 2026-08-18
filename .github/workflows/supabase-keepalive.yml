@@ -1,0 +1,50 @@
+name: Supabase Keep-Alive
+
+# Mantiene sveglio il progetto Supabase (piano Free va in pausa dopo 7 giorni di inattivita').
+# Gira 2 volte al giorno per sicurezza: GitHub puo' ritardare o saltare le esecuzioni schedulate.
+on:
+  schedule:
+    - cron: '17 6 * * *'   # 06:17 UTC ogni giorno
+    - cron: '17 18 * * *'  # 18:17 UTC ogni giorno
+  workflow_dispatch:        # permette l'avvio manuale dalla tab Actions
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping Supabase REST API
+        env:
+          SUPABASE_URL: https://fvoiswsclfvdtxicomvk.supabase.co
+          # Chiave anon (pubblica per definizione: e' gia' inclusa nel frontend).
+          # Non e' una service_role key e non da' accesso privilegiato ai dati.
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2b2lzd3NjbGZ2ZHR4aWNvbXZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NzY1NzIsImV4cCI6MjA4OTI1MjU3Mn0.udL7NS2l-v_xej36gWBEt36Z4-zCa6gVp-tlImXlbEQ
+        run: |
+          set -euo pipefail
+
+          echo "Ping a $SUPABASE_URL ..."
+
+          # Riprova fino a 5 volte: se il progetto era in pausa serve tempo per il riavvio.
+          for attempt in 1 2 3 4 5; do
+            CODE=$(curl -s -o /tmp/resp.txt -w "%{http_code}" \
+              -H "apikey: $SUPABASE_ANON_KEY" \
+              -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+              "$SUPABASE_URL/rest/v1/contracts?select=id&limit=1" || echo "000")
+
+            echo "Tentativo $attempt -> HTTP $CODE"
+
+            if [ "$CODE" = "200" ]; then
+              echo "OK: database raggiungibile e attivo."
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 5 ]; then
+              echo "Non ancora pronto, attendo 60s..."
+              sleep 60
+            fi
+          done
+
+          echo "ERRORE: il database non ha risposto 200 dopo 5 tentativi."
+          echo "Ultima risposta:"
+          cat /tmp/resp.txt || true
+          exit 1
