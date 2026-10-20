@@ -173,6 +173,10 @@
       display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
       overflow:hidden; font-size:12.5px; color:#334155; overflow-wrap:anywhere;
     }
+    .mergePreview{ border:1px solid var(--border); border-radius:14px; padding:12px; background:#f8fafc; font-size:13.5px; line-height:1.5; color:var(--text); }
+    .mergePreview ul{ margin:6px 0 0; padding-left:18px; }
+    .mergePreview .warn{ color:#7c2d12; }
+    .mergePreview .codes{ font-size:12px; color:var(--muted); margin-top:6px; overflow-wrap:anywhere; }
     .rowActions{ display:inline-flex; gap:6px; }
     .iconBtn{ min-height:36px; min-width:38px; padding:0 9px; border-radius:10px; font-size:15px; gap:6px; }
     .iconBtn .lbl{ display:none; font-size:13px; }
@@ -196,9 +200,9 @@
     .kpi .s{ font-size:12.5px; color:var(--muted); margin-top:4px; }
 
     .filtersPanel{ border:1px solid var(--border); border-radius:16px; background: linear-gradient(180deg, rgba(15,23,42,.02), rgba(15,23,42,.00)); padding:12px; }
-    .filtersHead{ display:grid; grid-template-columns: 1fr auto; align-items:center; gap:12px; margin-bottom:12px; }
+    .filtersHead{ display:grid; grid-template-columns: 1fr; align-items:center; gap:10px; margin-bottom:12px; }
     .filtersHead .title{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; font-weight:1000; }
-    .filterActions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end; }
+    .filterActions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-start; }
     .filterActions .btn{ flex:0 0 auto; }
     .chip{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background: var(--chip); border:1px solid var(--border); color:#0f172a; font-weight:950; font-size:12px; white-space:nowrap; }
 
@@ -449,6 +453,7 @@
               <button class="btn btn-ghost" type="button" id="btnImportBackup" title="Importa il report Excel Sky (solo pratiche AM Isernia) oppure un backup .json">Importa Excel / backup</button>
               <input type="file" id="backupFile" accept=".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,.json,application/json" class="hidden" />
               <button class="btn btn-ghost" type="button" id="btnExportPdf">🖨️ Stampa PDF</button>
+              <button class="btn btn-ghost" type="button" id="btnMergeShops" title="Unisci due nomi che indicano lo stesso negozio, senza duplicare i contratti">🔀 Unisci negozi</button>
               <button class="btn btn-wa" type="button" id="btnWhatsApp">Invia WhatsApp</button>
             </div>
           </div>
@@ -643,6 +648,34 @@
 
   <datalist id="negoziKnown"></datalist>
 
+  <!-- MODAL UNISCI NEGOZI -->
+  <div class="modalBackdrop" id="mergeBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" style="width:min(680px, 100%)">
+      <div class="modalHead">
+        <strong>🔀 Unisci negozi</strong>
+        <button class="btn btn-ghost" type="button" id="btnCloseMerge">Chiudi</button>
+      </div>
+      <div class="modalBody">
+        <div class="grid">
+          <div class="field full">
+            <label>Negozio da unire (questo nome sparisce)</label>
+            <select id="mergeFrom"></select>
+          </div>
+          <div class="field full">
+            <label>Negozio di destinazione (questo nome resta)</label>
+            <select id="mergeTo"></select>
+          </div>
+          <div class="field full">
+            <div class="mergePreview" id="mergePreview">Scegli i due negozi per vedere cosa succede.</div>
+          </div>
+        </div>
+      </div>
+      <div class="modalFoot">
+        <button class="btn btn-primary" type="button" id="btnDoMerge" disabled>Unisci negozi</button>
+      </div>
+    </div>
+  </div>
+
   <div class="toast" id="toast"></div>
 
   <script type="module">
@@ -710,6 +743,13 @@
       const hit = existing.find(n => normKey(n) === key);
       return hit || raw;
     }
+    // Chiave di confronto per i codici contratto: solo lettere e cifre, minuscole
+    // (" 5147728891 ", "5147-728891" e "5147728891" sono lo stesso contratto).
+    const normCode = (s) => String(s || "").replace(/[^0-9a-z]/gi, "").toLowerCase();
+    const findByCode = (code, exceptId) => {
+      const k = normCode(code);
+      return k ? rows.find(r => r.id !== exceptId && normCode(r.codContratto) === k) : null;
+    };
     const stateBadgeClass = (st) => {
       if(st === "ko" || st === "cessato") return "badge b-bad"; // rosso
       if(st === "in_attivazione") return "badge b-warn";        // giallo
@@ -1213,6 +1253,8 @@
         dataWifi: aDataWifi.value || "", dataTv: aDataTv.value || "",
         note: clean(aNote.value), punteggio: calcScore(type)
       };
+      const dupAdd = findByCode(obj.codContratto);
+      if(dupAdd && !confirm(`Il codice contratto ${obj.codContratto} è già in archivio:\n${dupAdd.negozio} • ${dupAdd.nome} ${dupAdd.cognome}\n\nSalvare comunque un secondo contratto con lo stesso codice?`)) return;
       btnSaveAdd.disabled = true;
       const saved = await insertRowDB(obj);
       btnSaveAdd.disabled = false;
@@ -1256,6 +1298,8 @@
         dataWifi: eDataWifi.value || "", dataTv: eDataTv.value || "",
         note: clean(eNote.value), punteggio: calcScore(type)
       };
+      const dupEdit = findByCode(patch.codContratto, editingId);
+      if(dupEdit && !confirm(`Il codice contratto ${patch.codContratto} è già usato da un altro contratto:\n${dupEdit.negozio} • ${dupEdit.nome} ${dupEdit.cognome}\n\nSalvare comunque?`)) return;
       btnSaveEdit.disabled = true;
       const saved = await updateRowDB(editingId, patch);
       btnSaveEdit.disabled = false;
@@ -1331,12 +1375,12 @@
     // e non modifica mai i contratti gia' presenti (quelli con lo stesso codice vengono saltati).
     async function importRowsWithDedup(importedRows, origine){
       const codiciPresenti = new Set(
-        rows.map(r => (r.codContratto || "").trim().toLowerCase()).filter(Boolean)
+        rows.map(r => normCode(r.codContratto)).filter(Boolean)
       );
       const nuove = [];
       let saltate = 0;
       for(const r of importedRows){
-        const cod = (r.codContratto || "").trim().toLowerCase();
+        const cod = normCode(r.codContratto);
         if(cod && codiciPresenti.has(cod)){ saltate++; continue; }
         if(cod) codiciPresenti.add(cod);
         nuove.push(r);
@@ -1494,6 +1538,119 @@
       };
       reader.readAsText(file);
     }
+    // ====== UNISCI NEGOZI ======
+    // Sposta i contratti del negozio "from" sul negozio "to". Se lo stesso codice contratto
+    // esiste gia' in "to", le due righe diventano una sola: si tiene come base quella con
+    // l'anagrafica vera (non il segnaposto = codice) e si completano i campi vuoti con l'altra.
+    const mergeBackdrop = el("mergeBackdrop");
+    const mergeFrom = el("mergeFrom");
+    const mergeTo = el("mergeTo");
+    const mergePreview = el("mergePreview");
+    const btnDoMerge = el("btnDoMerge");
+
+    const isPlaceholder = (v, r) => {
+      const x = String(v || "").trim();
+      return !x || normCode(x) === normCode(r.codContratto);
+    };
+
+    function mergePlan(from, to){
+      const src = rows.filter(r => r.negozio === from);
+      const dstByCode = new Map();
+      rows.filter(r => r.negozio === to).forEach(r => {
+        const k = normCode(r.codContratto);
+        if(k && !dstByCode.has(k)) dstByCode.set(k, r);
+      });
+      const moves = [], pairs = [];
+      for(const r of src){
+        const d = dstByCode.get(normCode(r.codContratto));
+        if(d) pairs.push({ src:r, dst:d }); else moves.push(r);
+      }
+      return { src, moves, pairs };
+    }
+
+    function mergeRecords(base, other, negozio){
+      const out = { ...base, negozio };
+      for(const k of ["nome", "cognome", "cf"]){
+        if(isPlaceholder(out[k], out) && !isPlaceholder(other[k], other)) out[k] = other[k];
+      }
+      for(const k of ["tipologia", "dataIns", "dataWifi", "dataTv"]){
+        if(!out[k] && other[k]) out[k] = other[k];
+      }
+      const na = (base.note || "").trim(), nb = (other.note || "").trim();
+      out.note = (na && nb && na !== nb) ? `${na} | ${nb}` : (na || nb);
+      out.punteggio = calcScore(out.tipologia);
+      return out;
+    }
+
+    function openMerge(){
+      const list = uniqSorted(rows.map(r => r.negozio));
+      const opts = `<option value="">Seleziona…</option>` + list.map(n => {
+        const c = rows.filter(r => r.negozio === n).length;
+        return `<option value="${esc(n)}">${esc(n)} (${c})</option>`;
+      }).join("");
+      mergeFrom.innerHTML = opts;
+      mergeTo.innerHTML = opts;
+      updateMergePreview();
+      mergeBackdrop.classList.add("show");
+    }
+    function closeMerge(){ mergeBackdrop.classList.remove("show"); }
+
+    function updateMergePreview(){
+      const from = mergeFrom.value, to = mergeTo.value;
+      btnDoMerge.disabled = true;
+      if(!from || !to){ mergePreview.innerHTML = "Scegli i due negozi per vedere cosa succede."; return; }
+      if(from === to){ mergePreview.innerHTML = `<span class="warn">Hai scelto lo stesso negozio due volte.</span>`; return; }
+      const { src, moves, pairs } = mergePlan(from, to);
+      const codici = pairs.map(p => esc(p.src.codContratto));
+      mergePreview.innerHTML = `
+        <strong>${src.length}</strong> contratti di <strong>${esc(from)}</strong> passano a <strong>${esc(to)}</strong>:
+        <ul>
+          <li><strong>${moves.length}</strong> vengono spostati così come sono</li>
+          <li><strong>${pairs.length}</strong> hanno lo stesso codice di un contratto già in ${esc(to)}:
+            le due righe diventano <strong>una sola</strong> (si tengono nome, cognome, CF, date e note già compilati;
+            la copia viene eliminata)</li>
+        </ul>
+        ${pairs.length ? `<div class="codes">Codici doppi: ${codici.join(", ")}</div>` : ""}
+        <div class="codes">Gli altri negozi non vengono toccati.</div>`;
+      btnDoMerge.disabled = src.length === 0;
+    }
+
+    async function doMerge(){
+      const from = mergeFrom.value, to = mergeTo.value;
+      if(!from || !to || from === to) return;
+      const { src, moves, pairs } = mergePlan(from, to);
+      if(!src.length) return;
+      const msg = `Unire "${from}" in "${to}"?\n\n• ${moves.length} contratti spostati\n• ${pairs.length} contratti doppi uniti in una riga sola (${pairs.length} copie eliminate)\n\nL'operazione non si può annullare.`;
+      if(!confirm(msg)) return;
+
+      btnDoMerge.disabled = true;
+      btnDoMerge.textContent = "Unione in corso…";
+      let spostati = 0, uniti = 0, errori = 0;
+      try{
+        for(const r of moves){
+          const s = await updateRowDB(r.id, { ...r, negozio: to });
+          s ? spostati++ : errori++;
+        }
+        for(const p of pairs){
+          const srcReal = !isPlaceholder(p.src.nome, p.src);
+          const dstReal = !isPlaceholder(p.dst.nome, p.dst);
+          const [base, other] = (srcReal && !dstReal) ? [p.src, p.dst] : [p.dst, p.src];
+          const s = await updateRowDB(base.id, mergeRecords(base, other, to));
+          if(!s){ errori++; continue; }          // se l'aggiornamento fallisce non elimino la copia
+          const ok = await deleteRowDB(other.id);
+          ok ? uniti++ : errori++;
+        }
+      }finally{
+        btnDoMerge.textContent = "Unisci negozi";
+        await loadRowsFromDB();
+        renderAll();
+        closeMerge();
+      }
+      const esito = `Unione completata: ${spostati} contratti spostati, ${uniti} doppioni uniti.`;
+      if(errori) alert(`${esito}\n\nAttenzione: ${errori} operazioni non riuscite. Riprova: le righe gia' unite non vengono toccate di nuovo.`);
+      else toast(esito, 3600);
+    }
+
     function buildAndSavePdf(rowsList, filterInfo, filename){
       if(!window.jspdf || !window.jspdf.jsPDF){ alert("Libreria PDF non caricata. Ricarica la pagina."); return false; }
 
@@ -1793,6 +1950,12 @@
 
     btnExportCsv.addEventListener("click", exportCsvCurrent);
     el("btnExportPdf").addEventListener("click", exportPdfCurrent);
+    el("btnMergeShops").addEventListener("click", openMerge);
+    el("btnCloseMerge").addEventListener("click", closeMerge);
+    mergeBackdrop.addEventListener("click", (e)=>{ if(e.target === mergeBackdrop) closeMerge(); });
+    mergeFrom.addEventListener("change", updateMergePreview);
+    mergeTo.addEventListener("change", updateMergePreview);
+    btnDoMerge.addEventListener("click", doMerge);
     el("btnMonthReports").addEventListener("click", generateMonthReports);
     btnExportBackup.addEventListener("click", exportBackup);
     btnImportBackup.addEventListener("click", ()=> backupFile.click());
