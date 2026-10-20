@@ -446,8 +446,8 @@
               <button class="btn btn-soft" type="button" id="btnClearFilters">Reset filtri</button>
               <button class="btn btn-ghost" type="button" id="btnExportCsv">Esporta CSV</button>
               <button class="btn btn-ghost" type="button" id="btnExportBackup">Esporta backup</button>
-              <button class="btn btn-ghost" type="button" id="btnImportBackup">Importa backup</button>
-              <input type="file" id="backupFile" accept=".json,application/json" class="hidden" />
+              <button class="btn btn-ghost" type="button" id="btnImportBackup" title="Importa il report Excel Sky (solo pratiche AM Isernia) oppure un backup .json">Importa Excel / backup</button>
+              <input type="file" id="backupFile" accept=".xlsx,.xlsm,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,.json,application/json" class="hidden" />
               <button class="btn btn-ghost" type="button" id="btnExportPdf">🖨️ Stampa PDF</button>
               <button class="btn btn-wa" type="button" id="btnWhatsApp">Invia WhatsApp</button>
             </div>
@@ -1327,8 +1327,156 @@
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     }
+    // Aggiunge all'archivio solo i contratti nuovi. Fa SOLO insert: non cancella
+    // e non modifica mai i contratti gia' presenti (quelli con lo stesso codice vengono saltati).
+    async function importRowsWithDedup(importedRows, origine){
+      const codiciPresenti = new Set(
+        rows.map(r => (r.codContratto || "").trim().toLowerCase()).filter(Boolean)
+      );
+      const nuove = [];
+      let saltate = 0;
+      for(const r of importedRows){
+        const cod = (r.codContratto || "").trim().toLowerCase();
+        if(cod && codiciPresenti.has(cod)){ saltate++; continue; }
+        if(cod) codiciPresenti.add(cod);
+        nuove.push(r);
+      }
+      if(!nuove.length){
+        alert(`Nessuna riga da importare: tutti i ${importedRows.length} contratti (${origine}) sono gia' presenti in archivio.`);
+        return;
+      }
+      const dettaglio = saltate
+        ? `\n\nTrovati ${importedRows.length} contratti (${origine}):\n• ${nuove.length} da aggiungere\n• ${saltate} gia' presenti (saltati)`
+        : `\n\nTutti i ${nuove.length} contratti (${origine}) sono nuovi.`;
+      if(!confirm(`Importare ${nuove.length} contratti nel tuo archivio cloud? (i tuoi dati attuali restano)${dettaglio}`)) return;
+
+      const toInsert = nuove.map(r => rowToDb({
+        negozio: canonicalNegozio(r.negozio || ""), nome: r.nome || "", cognome: r.cognome || "",
+        cf: r.cf || "", codContratto: r.codContratto || "",
+        tipologia: r.tipologia || "", stato: r.stato || "attivo",
+        dataIns: r.dataIns || "", dataWifi: r.dataWifi || "", dataTv: r.dataTv || "",
+        note: r.note || "", punteggio: (typeof r.punteggio === "number") ? r.punteggio : calcScore(r.tipologia)
+      }));
+      const { data, error } = await supabase.from("contracts").insert(toInsert).select();
+      if(error){ alert("Errore import: " + error.message); return; }
+      const inserted = (data || []).map(dbToRow);
+      rows = inserted.concat(rows);
+      renderAll();
+      toast(saltate
+        ? `Importate ${inserted.length} righe • ${saltate} gia' presenti saltate`
+        : `Importate ${inserted.length} righe`, 3200);
+    }
+
+    // ====== IMPORT DA EXCEL (report Sky mensile) ======
+    const EXCEL_AM = "ISERNIA";                // si importano solo le pratiche di questo Area Manager
+    const EXCEL_SHEET = "DB SCARICATO";        // foglio preferito; se manca si cerca per intestazioni
+    const EXCEL_TIPO = { "WIFI":"wifi", "TV":"tv", "TV GLASS":"glass", "GLASS":"glass",
+                         "3P TOT":"3p", "3P":"3p", "4P TOT":"4p", "4P":"4p" };
+    const EXCEL_STATO = { "ATTIVO":"attivo", "ATTESA MATRICOLA":"in_attivazione", "COMPLETO":"in_attivazione",
+                          "INCOMPLETO":"in_attivazione", "ANNULLATO":"annullato", "CESSATO":"cessato", "KO":"ko" };
+
+    function loadXlsxLib(){
+      if(window.XLSX) return Promise.resolve(window.XLSX);
+      return new Promise((resolve, reject) => {
+        const s = document.createElement("script");
+        s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+        s.onload = () => window.XLSX ? resolve(window.XLSX) : reject(new Error("libreria Excel non disponibile"));
+        s.onerror = () => reject(new Error("impossibile caricare la libreria Excel (sei offline?)"));
+        document.head.appendChild(s);
+      });
+    }
+
+    // Data Excel (numero seriale, oggetto Date o testo) -> "YYYY-MM-DD"
+    function excelDateISO(v){
+      if(v === null || v === undefined || v === "") return "";
+      if(typeof v === "number" && isFinite(v)){
+        const d = new Date(Math.round((v - 25569) * 86400000));
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,"0")}-${String(d.getUTCDate()).padStart(2,"0")}`;
+      }
+      const s = String(v).trim();
+      let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if(m) return `${m[1]}-${m[2]}-${m[3]}`;
+      m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if(m) return `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
+      return "";
+    }
+
+    async function excelToImportRows(file){
+      const XLSX = await loadXlsxLib();
+      const buf = await file.arrayBuffer();
+      // Legge l'elenco fogli senza caricarli, poi carica solo quello che serve (il file e' pesante).
+      const names = XLSX.read(buf, { type:"array", bookSheets:true }).SheetNames || [];
+      const norm = (x) => String(x ?? "").trim().toUpperCase();
+      const candidati = names.includes(EXCEL_SHEET) ? [EXCEL_SHEET, ...names.filter(n => n !== EXCEL_SHEET)] : names;
+
+      let data = null, H = null, usato = "";
+      for(const name of candidati){
+        const wb = XLSX.read(buf, { type:"array", sheets:[name], dense:true });
+        const ws = wb.Sheets[name];
+        if(!ws) continue;
+        const grid = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null, blankrows:false });
+        if(!grid.length) continue;
+        const hdr = grid[0].map(norm);
+        const need = ["AM", "CODICE CONTRATTO", "DEALER"];
+        if(need.every(h => hdr.includes(h))){
+          H = {}; hdr.forEach((h, i) => { if(!(h in H)) H[h] = i; });
+          data = grid.slice(1); usato = name;
+          break;
+        }
+      }
+      if(!data) throw new Error(`nel file non trovo un foglio con le colonne DEALER, AM e CODICE CONTRATTO.`);
+
+      const col = (r, h) => (H[h] === undefined ? null : r[H[h]]);
+      const mie = data.filter(r => norm(col(r, "AM")).includes(EXCEL_AM));
+
+      // Le 3P compaiono su due righe con lo stesso codice: tengo quella con la tipologia.
+      const best = new Map();
+      for(const r of mie){
+        const cod = String(col(r, "CODICE CONTRATTO") ?? "").trim();
+        if(!cod) continue;
+        const tipo = norm(col(r, "TIPOLOGIA"));
+        const prev = best.get(cod);
+        if(!prev || (tipo && !prev.tipo)) best.set(cod, { r, tipo });
+      }
+
+      const out = [];
+      for(const [cod, { r, tipo }] of best){
+        const tipologia = EXCEL_TIPO[tipo] || "";
+        out.push({
+          negozio: String(col(r, "DEALER") ?? "").trim(),
+          nome: cod, cognome: cod, cf: cod,   // segnaposto: si completano poi a mano
+          codContratto: cod,
+          tipologia,
+          stato: EXCEL_STATO[norm(col(r, "STATO CONTRATTO"))] || "in_attivazione",
+          dataIns: excelDateISO(col(r, "DATA STIPULA")),
+          dataWifi: "", dataTv: "", note: "",
+          punteggio: calcScore(tipologia)
+        });
+      }
+      out.sort((a, b) => (a.dataIns + a.codContratto).localeCompare(b.dataIns + b.codContratto));
+      return { rows: out, foglio: usato };
+    }
+
     async function handleImportBackup(file){
       if(!file) return;
+
+      if(/\.(xlsx|xlsm|xls)$/i.test(file.name)){
+        try{
+          toast("Lettura del file Excel in corso…", 6000);
+          const { rows: dalExcel, foglio } = await excelToImportRows(file);
+          if(!dalExcel.length){
+            alert(`Nel foglio "${foglio}" non ci sono pratiche con AM ${EXCEL_AM}.`);
+            return;
+          }
+          await importRowsWithDedup(dalExcel, `AM ${EXCEL_AM} dal foglio "${foglio}"`);
+        }catch(e){
+          alert("Errore lettura Excel: " + (e && e.message ? e.message : e));
+        }finally{
+          backupFile.value = "";
+        }
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = async () => {
         try{
@@ -1337,43 +1485,7 @@
           if(Array.isArray(parsed)) importedRows = parsed;
           else if(parsed && Array.isArray(parsed.rows)) importedRows = parsed.rows;
           if(!Array.isArray(importedRows)){ alert("File backup non valido."); return; }
-
-          // Salta i contratti il cui codice e' gia' in archivio (e i doppioni interni al file).
-          const codiciPresenti = new Set(
-            rows.map(r => (r.codContratto || "").trim().toLowerCase()).filter(Boolean)
-          );
-          const nuove = [];
-          let saltate = 0;
-          for(const r of importedRows){
-            const cod = (r.codContratto || "").trim().toLowerCase();
-            if(cod && codiciPresenti.has(cod)){ saltate++; continue; }
-            if(cod) codiciPresenti.add(cod);
-            nuove.push(r);
-          }
-          if(!nuove.length){
-            alert(`Nessuna riga da importare: tutti i ${importedRows.length} contratti del file sono gia' presenti in archivio.`);
-            return;
-          }
-          const dettaglio = saltate
-            ? `\n\nTrovate ${importedRows.length} righe nel file:\n• ${nuove.length} da aggiungere\n• ${saltate} gia' presenti (saltate)`
-            : `\n\nTutte e ${nuove.length} le righe sono nuove.`;
-          if(!confirm(`Importare ${nuove.length} contratti nel tuo archivio cloud? (i tuoi dati attuali restano)${dettaglio}`)) return;
-
-          const toInsert = nuove.map(r => rowToDb({
-            negozio: canonicalNegozio(r.negozio || ""), nome: r.nome || "", cognome: r.cognome || "",
-            cf: r.cf || "", codContratto: r.codContratto || "",
-            tipologia: r.tipologia || "", stato: r.stato || "attivo",
-            dataIns: r.dataIns || "", dataWifi: r.dataWifi || "", dataTv: r.dataTv || "",
-            note: r.note || "", punteggio: (typeof r.punteggio === "number") ? r.punteggio : calcScore(r.tipologia)
-          }));
-          const { data, error } = await supabase.from("contracts").insert(toInsert).select();
-          if(error){ alert("Errore import: " + error.message); return; }
-          const inserted = (data || []).map(dbToRow);
-          rows = inserted.concat(rows);
-          renderAll();
-          toast(saltate
-            ? `Importate ${inserted.length} righe • ${saltate} gia' presenti saltate`
-            : `Importate ${inserted.length} righe`, 3200);
+          await importRowsWithDedup(importedRows, "dal file di backup");
         }catch(e){
           alert("Errore durante l'importazione del backup.");
         }finally{
