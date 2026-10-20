@@ -652,7 +652,12 @@
     };
     const uniqSorted = (arr) => [...new Set(arr.filter(Boolean))]
       .sort((a,b)=>a.localeCompare(b, "it", {sensitivity:"base"}));
-    const normKey = (s) => (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+    // Chiave di confronto per i nomi negozio: ignora maiuscole, spazi doppi e
+    // punteggiatura, cosi' "DM SERVICE S.R.L." e "DM SERVICE SRL" sono lo stesso negozio.
+    const normKey = (s) => (s || "").trim().toLowerCase()
+      .replace(/[.,'`]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
     function canonicalNegozio(input){
       const raw = clean(input);
       if(!raw) return raw;
@@ -1277,9 +1282,30 @@
           if(Array.isArray(parsed)) importedRows = parsed;
           else if(parsed && Array.isArray(parsed.rows)) importedRows = parsed.rows;
           if(!Array.isArray(importedRows)){ alert("File backup non valido."); return; }
-          if(!confirm(`Importare ${importedRows.length} righe nel tuo archivio cloud? (i tuoi dati attuali restano)`)) return;
-          const toInsert = importedRows.map(r => rowToDb({
-            negozio: r.negozio || "", nome: r.nome || "", cognome: r.cognome || "",
+
+          // Salta i contratti il cui codice e' gia' in archivio (e i doppioni interni al file).
+          const codiciPresenti = new Set(
+            rows.map(r => (r.codContratto || "").trim().toLowerCase()).filter(Boolean)
+          );
+          const nuove = [];
+          let saltate = 0;
+          for(const r of importedRows){
+            const cod = (r.codContratto || "").trim().toLowerCase();
+            if(cod && codiciPresenti.has(cod)){ saltate++; continue; }
+            if(cod) codiciPresenti.add(cod);
+            nuove.push(r);
+          }
+          if(!nuove.length){
+            alert(`Nessuna riga da importare: tutti i ${importedRows.length} contratti del file sono gia' presenti in archivio.`);
+            return;
+          }
+          const dettaglio = saltate
+            ? `\n\nTrovate ${importedRows.length} righe nel file:\n• ${nuove.length} da aggiungere\n• ${saltate} gia' presenti (saltate)`
+            : `\n\nTutte e ${nuove.length} le righe sono nuove.`;
+          if(!confirm(`Importare ${nuove.length} contratti nel tuo archivio cloud? (i tuoi dati attuali restano)${dettaglio}`)) return;
+
+          const toInsert = nuove.map(r => rowToDb({
+            negozio: canonicalNegozio(r.negozio || ""), nome: r.nome || "", cognome: r.cognome || "",
             cf: r.cf || "", codContratto: r.codContratto || "",
             tipologia: r.tipologia || "", stato: r.stato || "attivo",
             dataIns: r.dataIns || "", dataWifi: r.dataWifi || "", dataTv: r.dataTv || "",
@@ -1290,7 +1316,9 @@
           const inserted = (data || []).map(dbToRow);
           rows = inserted.concat(rows);
           renderAll();
-          toast(`Importate ${inserted.length} righe`);
+          toast(saltate
+            ? `Importate ${inserted.length} righe • ${saltate} gia' presenti saltate`
+            : `Importate ${inserted.length} righe`, 3200);
         }catch(e){
           alert("Errore durante l'importazione del backup.");
         }finally{
