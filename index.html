@@ -491,7 +491,7 @@
   <div class="modalBackdrop" id="addBackdrop">
     <div class="modal" role="dialog" aria-modal="true">
       <div class="modalHead">
-        <strong>➕ Aggiungi contratto</strong>
+        <strong id="addModalTitle">➕ Aggiungi contratto</strong>
         <button class="btn btn-ghost" type="button" id="btnCloseAdd">Chiudi</button>
       </div>
       <div class="modalBody">
@@ -1021,6 +1021,7 @@
           <td title="${esc(r.note || "")}">${esc(r.note || "")}</td>
           <td class="right"><strong>${scoreUI(r.punteggio ?? 0)}</strong></td>
           <td class="right">
+            <button class="btn btn-soft" style="padding:8px 10px;border-radius:12px" data-reins="${r.id}" title="Reinserisci questo contratto con gli stessi dati cliente">🔄 Reinserisci</button>
             <button class="btn btn-ghost" style="padding:8px 10px;border-radius:12px" data-edit="${r.id}">Modifica</button>
             <button class="btn btn-danger" style="padding:8px 10px;border-radius:12px" data-del="${r.id}">Elimina</button>
           </td>
@@ -1032,6 +1033,9 @@
       });
       tbody.querySelectorAll("[data-edit]").forEach(btn=>{
         btn.addEventListener("click", ()=> openEdit(btn.getAttribute("data-edit")));
+      });
+      tbody.querySelectorAll("[data-reins]").forEach(btn=>{
+        btn.addEventListener("click", ()=> openReinsert(btn.getAttribute("data-reins")));
       });
       const pointsRounded = round1(totalPoints);
       kpiPill.textContent = `Totale: ${filtered.length} • Punti: ${scoreUI(pointsRounded)}`;
@@ -1091,14 +1095,38 @@
 
     // ====== ADD ======
     function openAdd(){
+      el("addModalTitle").textContent = "➕ Aggiungi contratto";
       aDataIns.value = aDataIns.value || todayISO();
       aPunteggio.value = "";
       aNoteTipologia.textContent = "";
       addBackdrop.classList.add("show");
       setTimeout(()=> aNegozio.focus(), 50);
     }
+    // Riapre il pannello di inserimento con i dati cliente gia' copiati:
+    // resta da compilare solo il nuovo codice contratto (la data e' gia' oggi).
+    function openReinsert(id){
+      const r = rows.find(x => x.id === id);
+      if(!r) return;
+      el("addModalTitle").textContent = "🔄 Reinserisci contratto";
+      aNegozio.value = r.negozio || "";
+      aNome.value = r.nome || "";
+      aCognome.value = r.cognome || "";
+      aCf.value = r.cf || "";
+      aTipologia.value = r.tipologia || "";
+      aNote.value = r.note || "";
+      aCodContratto.value = "";
+      aStato.value = "in_attivazione";
+      aDataIns.value = todayISO();
+      aDataWifi.value = "";
+      aDataTv.value = "";
+      updateAddScore();
+      addBackdrop.classList.add("show");
+      setTimeout(()=> { aCodContratto.focus(); aCodContratto.select(); }, 50);
+      toast("Dati cliente copiati — inserisci il nuovo codice contratto");
+    }
     function closeAdd(){ addBackdrop.classList.remove("show"); }
     function resetAdd(){
+      el("addModalTitle").textContent = "➕ Aggiungi contratto";
       aNegozio.value = ""; aNome.value = ""; aCognome.value = ""; aCf.value = "";
       aCodContratto.value = ""; aTipologia.value = ""; aStato.value = "in_attivazione";
       aDataIns.value = todayISO(); aDataWifi.value = ""; aDataTv.value = "";
