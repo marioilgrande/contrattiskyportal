@@ -253,6 +253,8 @@
     }
     .authTab.active{ background: linear-gradient(90deg,#cf01cf,#6a00ff); color:#fff; border-color:transparent; }
     .authMsg{ font-size:13px; margin-top:10px; min-height: 18px; }
+    .linkBtn{ display:block; margin:12px auto 0; background:none; border:0; padding:4px 6px; color:#6a00ff; font-weight:800; font-size:13.5px; cursor:pointer; text-decoration:underline; font-family:inherit; }
+    .linkBtn:disabled{ opacity:.5; cursor:default; }
     .authMsg.err{ color:#b91c1c; }
     .authMsg.ok{ color:#065f46; }
 
@@ -331,7 +333,7 @@
       <h1>SKY • Contratti Partner</h1>
       <p class="sub">Accedi per sincronizzare i tuoi contratti su tutti i dispositivi.</p>
 
-      <div class="authTabs">
+      <div class="authTabs" id="authTabs">
         <button class="authTab active" id="tabSignin" type="button">Accedi</button>
         <button class="authTab" id="tabSignup" type="button">Registrati</button>
       </div>
@@ -346,7 +348,23 @@
           <input type="password" id="authPass" required minlength="6" autocomplete="current-password" />
         </div>
         <button class="btn btn-primary" id="authSubmit" type="submit" style="width:100%">Accedi</button>
+        <button class="linkBtn" type="button" id="btnForgot">Password dimenticata?</button>
         <div class="authMsg" id="authMsg"></div>
+      </form>
+
+      <!-- Nuova password (dal link dell'email di recupero) -->
+      <form id="newPassForm" class="hidden" autocomplete="on">
+        <p class="sub" style="margin:0 0 14px">Scegli una nuova password per <strong id="npEmail">il tuo account</strong>.</p>
+        <div class="field full" style="margin-bottom:10px">
+          <label>Nuova password (minimo 6 caratteri)</label>
+          <input type="password" id="npPass" required minlength="6" autocomplete="new-password" />
+        </div>
+        <div class="field full" style="margin-bottom:10px">
+          <label>Ripeti la nuova password</label>
+          <input type="password" id="npPass2" required minlength="6" autocomplete="new-password" />
+        </div>
+        <button class="btn btn-primary" id="npSubmit" type="submit" style="width:100%">Salva nuova password</button>
+        <div class="authMsg" id="npMsg"></div>
       </form>
     </div>
   </div>
@@ -361,6 +379,7 @@
       <div class="actions" style="margin:0">
         <button class="btn btn-top" type="button" id="btnAdd">➕ AGGIUNGI</button>
         <button class="btn btn-top" type="button" id="btnToggleRank">🏆 CLASSIFICA</button>
+        <button class="btn btn-top" type="button" id="btnChangePass" title="Cambia la password di accesso">🔑 Password</button>
         <button class="btn btn-top" type="button" id="btnLogout">Esci</button>
         <div class="pill" id="kpiPill">Totale: 0 • Punti: 0</div>
       </div>
@@ -648,6 +667,33 @@
 
   <datalist id="negoziKnown"></datalist>
 
+  <!-- MODAL CAMBIA PASSWORD -->
+  <div class="modalBackdrop" id="pwBackdrop">
+    <div class="modal" role="dialog" aria-modal="true" style="width:min(460px, 100%)">
+      <div class="modalHead">
+        <strong>🔑 Cambia password</strong>
+        <button class="btn btn-ghost" type="button" id="btnClosePw">Chiudi</button>
+      </div>
+      <div class="modalBody">
+        <form id="pwForm" autocomplete="on">
+          <p class="muted" style="margin:0 0 12px;font-size:13px">Account: <strong id="pwEmail">—</strong></p>
+          <div class="field full" style="margin-bottom:10px">
+            <label>Nuova password (minimo 6 caratteri)</label>
+            <input type="password" id="pwNew" required minlength="6" autocomplete="new-password" />
+          </div>
+          <div class="field full">
+            <label>Ripeti la nuova password</label>
+            <input type="password" id="pwNew2" required minlength="6" autocomplete="new-password" />
+          </div>
+          <div class="authMsg" id="pwMsg"></div>
+        </form>
+      </div>
+      <div class="modalFoot">
+        <button class="btn btn-primary" type="submit" form="pwForm" id="btnSavePw">Salva password</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL UNISCI NEGOZI -->
   <div class="modalBackdrop" id="mergeBackdrop">
     <div class="modal" role="dialog" aria-modal="true" style="width:min(680px, 100%)">
@@ -683,6 +729,9 @@
 
     const SUPABASE_URL = 'https://fvoiswsclfvdtxicomvk.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ2b2lzd3NjbGZ2ZHR4aWNvbXZrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2NzY1NzIsImV4cCI6MjA4OTI1MjU3Mn0.udL7NS2l-v_xej36gWBEt36Z4-zCa6gVp-tlImXlbEQ';
+
+    // Letto prima che il client Supabase elabori e ripulisca il link (es. #...type=recovery).
+    const initialHash = location.hash || "";
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession: true, autoRefreshToken: true, storage: localStorage }
@@ -877,9 +926,108 @@
       renderAll();
     }
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    // ====== PASSWORD ======
+    // Il link dell'email di recupero riporta qui con "type=recovery": in quel caso si mostra
+    // il modulo per scegliere la nuova password invece di entrare subito nel portale.
+    let recoveryMode = /type=recovery/.test(initialHash);
+    const newPassForm = el("newPassForm");
+
+    {
+      const hashErr = new URLSearchParams(initialHash.replace(/^#/, "")).get("error_description");
+      if(hashErr){
+        authMsg.className = "authMsg err";
+        authMsg.textContent = "Il link non è più valido o è già stato usato. Scrivi la tua email e premi di nuovo «Password dimenticata?».";
+        history.replaceState(null, "", location.pathname);
+      }
+    }
+
+    async function saveNewPassword(p1, p2, msgEl){
+      msgEl.className = "authMsg";
+      msgEl.textContent = "";
+      if(p1.length < 6){ msgEl.className = "authMsg err"; msgEl.textContent = "La password deve avere almeno 6 caratteri."; return false; }
+      if(p1 !== p2){ msgEl.className = "authMsg err"; msgEl.textContent = "Le due password non coincidono."; return false; }
+      const { error } = await supabase.auth.updateUser({ password: p1 });
+      if(error){ msgEl.className = "authMsg err"; msgEl.textContent = "Errore: " + error.message; return false; }
+      return true;
+    }
+
+    function showNewPassword(){
+      authView.classList.remove("hidden");
+      appView.classList.add("hidden");
+      el("authTabs").classList.add("hidden");
+      authForm.classList.add("hidden");
+      newPassForm.classList.remove("hidden");
+      el("npEmail").textContent = currentUser?.email || "il tuo account";
+      setTimeout(()=> el("npPass").focus(), 50);
+    }
+
+    el("btnForgot").addEventListener("click", async ()=>{
+      const email = authEmail.value.trim();
+      authMsg.className = "authMsg";
+      if(!email || !authEmail.checkValidity()){
+        authMsg.className = "authMsg err";
+        authMsg.textContent = "Scrivi la tua email nel campo qui sopra, poi premi di nuovo «Password dimenticata?».";
+        authEmail.focus();
+        return;
+      }
+      const btn = el("btnForgot");
+      btn.disabled = true;
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+      btn.disabled = false;
+      if(error){
+        authMsg.className = "authMsg err";
+        authMsg.textContent = "Invio non riuscito: " + error.message;
+        return;
+      }
+      authMsg.className = "authMsg ok";
+      authMsg.textContent = `Se ${email} è registrata, ti arriva un'email con il link per scegliere una nuova password. Controlla anche lo spam.`;
+    });
+
+    newPassForm.addEventListener("submit", async (e)=>{
+      e.preventDefault();
+      const btn = el("npSubmit");
+      btn.disabled = true;
+      const ok = await saveNewPassword(el("npPass").value, el("npPass2").value, el("npMsg"));
+      btn.disabled = false;
+      if(!ok) return;
+      recoveryMode = false;
+      history.replaceState(null, "", location.pathname);
+      newPassForm.classList.add("hidden");
+      authForm.classList.remove("hidden");
+      el("authTabs").classList.remove("hidden");
+      toast("Password aggiornata", 3000);
+      showApp();
+    });
+
+    // Cambio password da dentro il portale (dispositivo gia' collegato)
+    const pwBackdrop = el("pwBackdrop");
+    function openPw(){
+      el("pwEmail").textContent = currentUser?.email || "—";
+      el("pwNew").value = ""; el("pwNew2").value = "";
+      el("pwMsg").textContent = ""; el("pwMsg").className = "authMsg";
+      pwBackdrop.classList.add("show");
+      setTimeout(()=> el("pwNew").focus(), 50);
+    }
+    function closePw(){ pwBackdrop.classList.remove("show"); }
+    el("btnChangePass").addEventListener("click", openPw);
+    el("btnClosePw").addEventListener("click", closePw);
+    pwBackdrop.addEventListener("click", (e)=>{ if(e.target === pwBackdrop) closePw(); });
+    el("pwForm").addEventListener("submit", async (e)=>{
+      e.preventDefault();
+      const btn = el("btnSavePw");
+      btn.disabled = true;
+      const ok = await saveNewPassword(el("pwNew").value, el("pwNew2").value, el("pwMsg"));
+      btn.disabled = false;
+      if(!ok) return;
+      closePw();
+      toast("Password aggiornata: usala per entrare dagli altri dispositivi", 4000);
+    });
+
+    supabase.auth.onAuthStateChange((event, session) => {
       currentUser = session?.user || null;
-      if(currentUser) showApp();
+      if(event === "PASSWORD_RECOVERY") recoveryMode = true;
+      if(currentUser && recoveryMode) showNewPassword();
+      else if(currentUser) showApp();
       else showAuth();
     });
 
@@ -1997,7 +2145,8 @@
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       currentUser = session?.user || null;
-      if(currentUser) await showApp();
+      if(currentUser && recoveryMode) showNewPassword();
+      else if(currentUser) await showApp();
       else showAuth();
     })();
 
