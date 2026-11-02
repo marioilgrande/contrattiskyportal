@@ -1519,9 +1519,10 @@
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     }
-    // Aggiunge all'archivio solo i contratti nuovi. Fa SOLO insert: non cancella
-    // e non modifica mai i contratti gia' presenti (quelli con lo stesso codice vengono saltati).
-    async function importRowsWithDedup(importedRows, origine){
+    // Aggiunge all'archivio i contratti nuovi (insert). Non cancella mai nulla.
+    // I contratti gia' presenti (stesso codice) vengono saltati; l'unica modifica ammessa
+    // su di loro e' il cambio di STATO passato in statoUpdates (solo dall'Excel, vedi planStateUpdates).
+    async function importRowsWithDedup(importedRows, origine, statoUpdates = []){
       const codiciPresenti = new Set(
         rows.map(r => normCode(r.codContratto)).filter(Boolean)
       );
@@ -1533,30 +1534,72 @@
         if(cod) codiciPresenti.add(cod);
         nuove.push(r);
       }
-      if(!nuove.length){
-        alert(`Nessuna riga da importare: tutti i ${importedRows.length} contratti (${origine}) sono gia' presenti in archivio.`);
+      if(!nuove.length && !statoUpdates.length){
+        alert(`Nessuna novità: tutti i ${importedRows.length} contratti (${origine}) sono gia' presenti in archivio e non ci sono stati da aggiornare.`);
         return;
       }
-      const dettaglio = saltate
-        ? `\n\nTrovati ${importedRows.length} contratti (${origine}):\n• ${nuove.length} da aggiungere\n• ${saltate} gia' presenti (saltati)`
-        : `\n\nTutti i ${nuove.length} contratti (${origine}) sono nuovi.`;
-      if(!confirm(`Importare ${nuove.length} contratti nel tuo archivio cloud? (i tuoi dati attuali restano)${dettaglio}`)) return;
 
-      const toInsert = nuove.map(r => rowToDb({
-        negozio: canonicalNegozio(r.negozio || ""), nome: r.nome || "", cognome: r.cognome || "",
-        cf: r.cf || "", codContratto: r.codContratto || "",
-        tipologia: r.tipologia || "", stato: r.stato || "attivo",
-        dataIns: r.dataIns || "", dataWifi: r.dataWifi || "", dataTv: r.dataTv || "",
-        note: r.note || "", punteggio: (typeof r.punteggio === "number") ? r.punteggio : calcScore(r.tipologia)
-      }));
-      const { data, error } = await supabase.from("contracts").insert(toInsert).select();
-      if(error){ alert("Errore import: " + error.message); return; }
-      const inserted = (data || []).map(dbToRow);
-      rows = inserted.concat(rows);
+      const righe = [`• ${nuove.length} contratti nuovi da aggiungere`];
+      if(statoUpdates.length){
+        const nA = statoUpdates.filter(u => u.a === "attivo").length;
+        const nN = statoUpdates.filter(u => u.a === "annullato").length;
+        righe.push(`• ${statoUpdates.length} contratti gia' presenti cambiano stato (${nA} → attivo, ${nN} → annullato)`);
+        const esempi = statoUpdates.slice(0, 8).map(u =>
+          `   ${u.row.codContratto}: ${STATE_LABEL[u.da] || u.da || "—"} → ${STATE_LABEL[u.a]}`);
+        if(statoUpdates.length > 8) esempi.push(`   … e altri ${statoUpdates.length - 8}`);
+        righe.push(...esempi);
+      }
+      if(saltate) righe.push(`• ${saltate} gia' presenti: nome, CF, date e note restano come sono`);
+      if(!confirm(`Confermi l'importazione (${origine})?\n\n${righe.join("\n")}\n\nNon viene cancellato nulla.`)) return;
+
+      let inserted = [];
+      if(nuove.length){
+        const toInsert = nuove.map(r => rowToDb({
+          negozio: canonicalNegozio(r.negozio || ""), nome: r.nome || "", cognome: r.cognome || "",
+          cf: r.cf || "", codContratto: r.codContratto || "",
+          tipologia: r.tipologia || "", stato: r.stato || "attivo",
+          dataIns: r.dataIns || "", dataWifi: r.dataWifi || "", dataTv: r.dataTv || "",
+          note: r.note || "", punteggio: (typeof r.punteggio === "number") ? r.punteggio : calcScore(r.tipologia)
+        }));
+        const { data, error } = await supabase.from("contracts").insert(toInsert).select();
+        if(error){ alert("Errore import: " + error.message); return; }
+        inserted = (data || []).map(dbToRow);
+        rows = inserted.concat(rows);
+      }
+
+      let aggiornati = 0, errori = 0;
+      for(const u of statoUpdates){
+        const saved = await updateRowDB(u.row.id, { ...u.row, stato: u.a });
+        if(!saved){ errori++; continue; }
+        const i = rows.findIndex(x => x.id === u.row.id);
+        if(i >= 0) rows[i] = saved;
+        aggiornati++;
+      }
+
       renderAll();
-      toast(saltate
-        ? `Importate ${inserted.length} righe • ${saltate} gia' presenti saltate`
-        : `Importate ${inserted.length} righe`, 3200);
+      const parti = [`${inserted.length} nuovi`];
+      if(statoUpdates.length) parti.push(`${aggiornati} stati aggiornati`);
+      if(saltate) parti.push(`${saltate} gia' presenti`);
+      if(errori) alert(`Import completato: ${parti.join(" • ")}.\n\nAttenzione: ${errori} stati non aggiornati per un errore. Reimporta lo stesso file per riprovare.`);
+      else toast(`Import completato: ${parti.join(" • ")}`, 3600);
+    }
+
+    // Per i contratti gia' in archivio l'Excel aggiorna SOLO lo stato e SOLO verso attivo/annullato.
+    // Gli altri stati si gestiscono a mano. "cessato" non viene mai sovrascritto (e' successivo all'attivazione).
+    const STATI_DA_EXCEL = new Set(["attivo", "annullato"]);
+    function planStateUpdates(list){
+      const out = [];
+      for(const x of list){
+        if(!STATI_DA_EXCEL.has(x.stato)) continue;
+        const k = normCode(x.codContratto);
+        if(!k) continue;
+        for(const r of rows){
+          if(normCode(r.codContratto) !== k) continue;
+          if(r.stato === x.stato || r.stato === "cessato") continue;
+          out.push({ row: r, da: r.stato, a: x.stato });
+        }
+      }
+      return out;
     }
 
     // ====== IMPORT DA EXCEL (report Sky mensile) ======
@@ -1564,8 +1607,8 @@
     const EXCEL_SHEET = "DB SCARICATO";        // foglio preferito; se manca si cerca per intestazioni
     const EXCEL_TIPO = { "WIFI":"wifi", "TV":"tv", "TV GLASS":"glass", "GLASS":"glass",
                          "3P TOT":"3p", "3P":"3p", "4P TOT":"4p", "4P":"4p" };
-    const EXCEL_STATO = { "ATTIVO":"attivo", "ATTESA MATRICOLA":"in_attivazione", "COMPLETO":"in_attivazione",
-                          "INCOMPLETO":"in_attivazione", "ANNULLATO":"annullato", "CESSATO":"cessato", "KO":"ko" };
+    // Dall'Excel si prendono solo ATTIVO e ANNULLATO; tutto il resto entra come "in attivazione".
+    const EXCEL_STATO = { "ATTIVO":"attivo", "ANNULLATO":"annullato" };
 
     function loadXlsxLib(){
       if(window.XLSX) return Promise.resolve(window.XLSX);
@@ -1660,7 +1703,7 @@
             alert(`Nel foglio "${foglio}" non ci sono pratiche con AM ${EXCEL_AM}.`);
             return;
           }
-          await importRowsWithDedup(dalExcel, `AM ${EXCEL_AM} dal foglio "${foglio}"`);
+          await importRowsWithDedup(dalExcel, `AM ${EXCEL_AM} dal foglio "${foglio}"`, planStateUpdates(dalExcel));
         }catch(e){
           alert("Errore lettura Excel: " + (e && e.message ? e.message : e));
         }finally{
